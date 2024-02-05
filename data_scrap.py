@@ -192,8 +192,10 @@ async def process_data(brand, description, heading, price):
         "year_manufacture": year_manufacture,
         "mileage": mileage,
         "power": power,
-        "price": price
+        "price": price,
+        "heading": heading,
     }
+    
     return car_data
 
 async def main():

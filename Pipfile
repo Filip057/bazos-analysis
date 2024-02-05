@@ -10,6 +10,7 @@ install = "*"
 beautifulsoup4 = "*"
 aiohttp = "*"
 nltk = "*"
+pytest = "*"
 
 [dev-packages]
 
