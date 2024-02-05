@@ -1,10 +1,11 @@
 from collections import Counter
 from bs4 import BeautifulSoup
-import requests
 import re
 
 import asyncio
 import aiohttp
+
+from concurrent.futures import ThreadPoolExecutor
 
 import time
 
@@ -51,8 +52,9 @@ def get_mileage(long_string: str):
     words_uned = text.split()
     # Define regular expression pattern for mileage
     pattern = r'(\d{1,3}(?:\s?\d{3})*(?:\.\d+)?)\s?km'  # Matches numbers with optional thousands separators followed by optional ' km'
-    pattern2 = r'(\d{1,3}(?:\s?\d{3})*)(?:\.|tis\.?)\s?km'  # Matches mileage value with 'tis' representing thousands followed by 'km'
+    pattern2 = r'(\d{1,3}(?:\s?\d{3})*)(?:\.|\s?tis\.?)\s?km'   # Matches mileage value with 'tis' representing thousands followed by 'km'
     pattern3 = r'(\d{1,3}(?:\s?\d{3})*)(?:\s?xxx\s?km)'
+    pattern4 =r''
 
     # Find all matches of the pattern in the text
     matches1 = re.findall(pattern, text)
@@ -71,33 +73,24 @@ def get_mileage(long_string: str):
 
 def get_power(long_string: str):
     text = re.sub(r'[^\w\s]', '', long_string.lower())
-    power = None
+    pattern_kW = re.compile(r'(\d{1,3})\s?kw', re.IGNORECASE)
+    match = pattern_kW.search(text)
+    if match:
+        return int(re.sub(r'\D', '', match.group(1)))  # Remove non-digit characters
+    return None
 
-    pattern_kW = r'(\d{1,3})\s?kw'
+def get_year_manufacture(long_string: str) -> int:
+    pattern = re.compile(r'(?:rok výroby|R\.?V\.?|rok|r\.?v\.?|výroba)?\s*(\d{4})\b', re.IGNORECASE)
+    match = pattern.search(long_string)
+    if match:
+        return int(match.group(1))
+    return None
 
-    matches_kW = re.findall(pattern_kW, text, re.IGNORECASE)
-    if matches_kW:  # If kW pattern matches
-        power = int(matches_kW[0].replace(' ', '').replace('.', ''))  # Remove spaces and dots from the matched value
-
-    return power
-
-def get_year_manufacture(long_string: str) -> int: 
-    manufacture_year = None
-    clean_string = "".join(preprocess_text(text=long_string))
-
-    pattern = r'(?:rok výroby|R\.?V\.?|manufacture year|model year):\s*(\d{4})\b'
-
-    matches = re.findall(pattern, clean_string, re.IGNORECASE)
-    if matches:
-        manufacture_year = int(matches[0])      
-
-    return manufacture_year
-
-def get_model(brand ,header: str) -> str:
+def get_model(brand, header: str) -> str:
     models = CAR_MODELS.get(brand)
     if models is not None:
-        pattern = r'\b(?:' + '|'.join(models) + r')\b'
-        match = re.search(pattern, header, re.IGNORECASE)
+        pattern = re.compile(r'\b(?:' + '|'.join(models) + r')\b', re.IGNORECASE)
+        match = pattern.search(header)
         if match:
             return match.group(0)
     return None
@@ -140,41 +133,42 @@ async def get_all_pages_for_brands(brand_url_list):
 
 # [(brand, [all brand url pages])]
 
-async def get_urls_for_details(allpages_for_brand_list):
-    # Fetch URLs for details on each page asynchronously
-    final_list = []
-    for pages in allpages_for_brand_list:
-        brand = pages[0]
+async def get_urls_for_details(brand_pages):
+    async def fetch_and_process(url):
+        data = await fetch_data(url)
+        soup = BeautifulSoup(data, 'html.parser')
+        headings = soup.find_all('div', class_='inzeraty inzeratyflex')
         urls_detail_list = []
-        for page_url in pages[1]:
-            data = await fetch_data(page_url)
-            soup = BeautifulSoup(data, 'html.parser')
-            headings = soup.find_all('div', class_='inzeraty inzeratyflex')
-            if headings:
-                for head in headings:
-                    relative_url = head.find('a').get('href')
-                    absolute_url = f"https://auto.bazos.cz{relative_url}"
-                    urls_detail_list.append(absolute_url)
-        final_list.append((brand, urls_detail_list))
+        if headings:
+            for head in headings:
+                relative_url = head.find('a').get('href')
+                absolute_url = f"https://auto.bazos.cz{relative_url}"
+                urls_detail_list.append(absolute_url)
+        return urls_detail_list
+
+    tasks = [fetch_and_process(url) for brand, pages in brand_pages for url in pages]
+    results = await asyncio.gather(*tasks)
+    
+    final_list = [(brand, url) for brand, pages in brand_pages for urls in results for url in urls]
     return final_list
 
 # [(brand, [all detail urls])]
 
-async def get_descriptions_headings_price(brand_details_urls):
-    # Fetch descriptions and headings asynchronously
-    final_list = []
-    for brand, urls_detail_list in brand_details_urls:
-        descriptions_headings_price_list = []
-        for url in urls_detail_list:
-            data = await fetch_data(url)
-            soup = BeautifulSoup(data, 'html.parser')
-            description = soup.find('div', class_='popisdetail').text.strip()
-            heading = soup.find(class_="nadpisdetail").text.strip()
-            price_nc= soup.find('table').find('td', class_='listadvlevo').find('table').find_all('tr')[-1].text
-            price_digits = ''.join(re.findall(r'\d+', price_nc))
-            price = int(price_digits[0]) if price_digits else None
-            descriptions_headings_price_list.append((brand, description, heading, price))  # Include brand in the tuple
-        final_list.extend(descriptions_headings_price_list)  # Extend the final_list with descriptions_headings_list
+async def get_descriptions_headings_price(brand_urls):
+    async def fetch_and_process(url):
+        data = await fetch_data(url)
+        soup = BeautifulSoup(data, 'html.parser')
+        description = soup.find('div', class_='popisdetail').text.strip()
+        heading = soup.find(class_="nadpisdetail").text.strip()
+        price_nc= soup.find('table').find('td', class_='listadvlevo').find('table').find_all('tr')[-1].text
+        price_digits = ''.join(re.findall(r'\d+', price_nc))
+        price = int(price_digits) if price_digits else None
+        return (description, heading, price)
+
+    tasks = [fetch_and_process(url) for brand, url in brand_urls]
+    results = await asyncio.gather(*tasks)
+
+    final_list = [(brand, *result) for (brand, _), result in zip(brand_urls, results)]
     return final_list
 
 async def process_data(brand, description, heading, price):
@@ -183,41 +177,40 @@ async def process_data(brand, description, heading, price):
     # Return car JSON
     model = get_model(brand=brand, header=heading)
     mileage = get_mileage(long_string=description)
+    if not mileage:
+        mileage = get_mileage(long_string=heading)
     year_manufacture = get_year_manufacture(long_string=description)
+    if not year_manufacture:
+        year_manufacture = get_year_manufacture(long_string=heading)
+    power = get_power(long_string=description)
+    if not power:
+        power = get_power(long_string=heading)
     
     car_data = {
         "brand": brand,
         "model": model,
         "year_manufacture": year_manufacture,
         "mileage": mileage,
+        "power": power,
         "price": price
     }
     return car_data
 
 async def main():
     # Step 1: Get car brands URLs
-    brand_url_list = await get_brand_urls()
-
-    # Select a subset of brand URLs for testing
-    brand_url_list = brand_url_list[11:12]  # Select the first brand URL for testing
+    # brand_urls = await get_brand_urls()
     
     # Step 2: Get all pages for each brand
-    allpages_for_brand_list = await get_all_pages_for_brands(brand_url_list)
-
-    # Select a subset of pages for testing
-    allpages_for_brand_list = allpages_for_brand_list[:1]  # Select the first page for testing
+    brand_pages = await get_all_pages_for_brands([('mazda', 'https://auto.bazos.cz/mazda/')])
     
-    # Step 3: Get URLs for details on each page
-    urls_detail_list = await get_urls_for_details(allpages_for_brand_list)
+    # Step 3: Get URLs for details on each page concurrently
+    urls_detail_list = await get_urls_for_details(brand_pages)
     
-    # Select a subset of URLs for testing
-    urls_detail_list = urls_detail_list[:1]  # Select the first URL for testing
-    
-    # Step 4: Get descriptions and headings
-    descriptions_headings_list = await get_descriptions_headings_price(urls_detail_list)
+    # Step 4: Get descriptions, headings, and prices concurrently
+    descriptions_headings_price_list = await get_descriptions_headings_price(urls_detail_list)
     
     # Step 5: Create tasks for processing data asynchronously
-    tasks = [process_data(brand, description, heading, price) for brand, description, heading, price in descriptions_headings_list]
+    tasks = [process_data(brand, description, heading, price) for brand, description, heading, price in descriptions_headings_price_list]
     processed_data = await asyncio.gather(*tasks)
     
     # Step 6: Handle processed data
@@ -230,16 +223,9 @@ async def run():
 
 
 if __name__ == "__main__":
+    start_time= time.time()
     asyncio.run(run())
-    print(time.time())
+    end_time = time.time()
+    print("Execution time:",end_time-start_time)
     
-"""
-1. get car brands url, returns brand_url_list
-2. takes brand_url_list, get get all pages for each brand, returns allpages_for_brand_list
-3. takes returns allpages_for_brand_list, get get all urls for detail on page, returns urls_detail_list 
-4. takes urls_detail_list, get describtion text and heading text from detail url
-5. process data (describtion text and heading text) - analyse string for each car offer
-6. create car json with brand, model, mileage, power, year of manufacture, price
-7. save it into dabase 
-8. create api endpoint with filters and comparison 
-"""
+

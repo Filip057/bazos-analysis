@@ -92,7 +92,7 @@ def get_mileage(long_string: str):
     words_uned = text.split()
     # Define regular expression pattern for mileage
     pattern = r'(\d{1,3}(?:\s?\d{3})*(?:\.\d+)?)\s?km'  # Matches numbers with optional thousands separators followed by optional ' km'
-    pattern2 = r'(\d{1,3}(?:\s?\d{3})*)(?:\.|tis\.?)\s?km'  # Matches mileage value with 'tis' representing thousands followed by 'km'
+    pattern2 = r'(\d{1,3}(?:\s?\d{3})*)(?:\.|\s?tis\.?)\s?km'  # Matches mileage value with 'tis' representing thousands followed by 'km'
     pattern3 = r'(\d{1,3}(?:\s?\d{3})*)(?:\s?xxx\s?km)'
 
     # Find all matches of the pattern in the text
@@ -124,13 +124,20 @@ def get_power(long_string: str):
 
 def get_year_manufacture(long_string: str) -> int: 
     manufacture_year = None
-    clean_string = "".join(preprocess_text(text=long_string))
+   
+    patterns = [
+        r'(?:rok výroby|R\.?V\.?|rok|r\.?v\.?):\s*(\d{4})\b',
+        r'(\d{4})\s*\(rok výroby\)',
+        r'výroba\s*(\d{4})',
+        r'\b(\d{4})\b',
+        r'rok výroby\s*(\d{4})',
+    ]
 
-    pattern = r'(?:rok výroby|R\.?V\.?|manufacture year|model year):\s*(\d{4})\b'
-
-    matches = re.findall(pattern, clean_string, re.IGNORECASE)
-    if matches:
-        manufacture_year = int(matches[0])      
+    for pattern in patterns:
+        matches = re.findall(pattern, long_string, re.IGNORECASE)
+        if matches:
+            manufacture_year = int(matches[0])
+            break
 
     return manufacture_year
 
@@ -153,10 +160,10 @@ def test(url):
     year_manufacture = get_year_manufacture(long_string=description)
     price_nc= soup.find('table').find('td', class_='listadvlevo').find('table').find_all('tr')[-1].text
     price_digits = ''.join(re.findall(r'\d+', price_nc))
-    price = int(price_digits[0]) if price_digits else None
+    price = int(price_digits) if price_digits else None
     power = get_power(long_string=description)
     obj = [model,mileage, price, power]
-
+   
     return obj
 
 
@@ -166,6 +173,9 @@ LONGSTR2 = "Prodám Honda Civic 1.4i, uvedení do provozu: 21.01.2011, najeto: 1
 LONGSTR3 = "Prodám BMW F31 320D Touring 2.0 140kW CR AUTOMAT, rok první registrace 10/2017 (model 2018), najeto 184.000km. STK do 9/2025 Možnost odpočtu DPH - Cena s DPH - PÍSEMNÁ ZÁRUKA NA PŮVOD VOZU A STAV NAJETÝCH KM"
 LONGSTR4 = 'Prodám C5 Rok výroby 2008, Dvoulitr 100 kW, najeto 239tis km. Vše funkční, dvou zónová klimatizace, kompletní servis v létě 2023. STK platná do září 2025. Nové zimní pneu na hlinikových 16 + sada letních kol (hliníkové 17). Vnitřek zachovaly, sedadla po celou dobu v návlecích. Na pravé straně mírně promáčknuté zadní dvere a blatník. Auto bez investic. Při rychlém jednání možná sleva.'
 LONGSTR5 = 'Mazda 3 2,2 Skyactiv D Rok výroby: 2014 Najeto: 170 xxx km Palivo: Diesel Převodovka: manuál (6ti stupňová) Výkon: 110kW (150 HP) STK: do únor 2026'       
+LONGSTR6 = 'Koupeno v ČR v autosalonu Louda. 1. Majitel. Rok výroby 2016. Objem 2.2 nafta 129kw – automatická převodovka s F1 pádly. Najeto 111500km – pravidelný po 8 tisících servis do posledního kilometru! Vše doloženo elektronickou servisní knihou. V 80tisícíh výměna oleje v převodovce + dekarbonizace motoru.'
+LONGSTR7 = "Prodám Mazdu 6 combi, 2.0 l, 108 kW, r.v. 2006, najeto 185 tis. km, fialová metalíza. Vše v elektrice, palubní počítač, klimatizace, audio systém Bose včetně subwoferu v kufru, CD přehrávač s integrovaným měničem na 6 CD, xenonové světlomety, senzor deště a denního svícení,"
+
 
 STRING_LIST = [
     'Nadstandardně vybavený vůz: Rok výroby 2019,6-mist,najeto 93 tisíc,v záruce, motor 2.0 Ecoblue 170k - bixenonové světlomety včetně denního svícení s LED technologií s funkcí odbočovacích světel a přední mlhové světlomety - parkovací kamera - nástupní schůdek vpravo i vlevo -jednosedadlo řidiče nastavitelné v 8 směrech s loketní opěrkou - vyhřívání sedadla řidiče a spolujezdce - čelní airbag spolujezdce a boční a hlavové airbagy vpředu - Audio sada 24 -Sync 3 s dotykovým displejem a hlasovým ovladaním,navigace s bezlatnou aktualizaci s ovládáním rádia na volantu, 6 reproduktorů, 4" displej, Bluetooth, USB, automatické nouzové volání Emergency Assist - Sada Viditelnost Plus - elektricky vyhřívané čelní sklo, elektricky ovládaná, sklopná vyhřívaná vnější zrcátka, ukazatel hladiny ostřikovače, automatické světlomety, automatické stěrače s dešťovým senzorem - dvoukřidle výklopné dveře vzadu - s vyhřívaným zadním sklem, - tažné zařízení včetně systému stabilizace přívěsu,zesílená zadní náprava,chránič motoru ze spodu,antiradar vestavěny,alarm,plechové 4 disky včetně letních gum vzorek 90%,elektrony celoroční pneu ,cena uvedena bez DPH,první majitel Barva černá',
@@ -185,4 +195,18 @@ if __name__ == '__main__':
     # detail_urls = get_car_detail_url_onpage(dict_url=ls)
     # details_list = get_car_describtion(car_detail_urls=detail_urls)
     # print(get_frequency_analysis(string_list=details_list).most_common(10))
-    print(get_year_manufacture(long_string=LONGSTR4))
+    # print(test(url='https://auto.bazos.cz/inzerat/180428729/mazda-6-20-manual-2019-bixenon-servis-mazda-vyhrevhead-up.php'))
+    
+    print(get_mileage(LONGSTR7))
+
+
+"""
+1. get car brands url, returns brand_url_list
+2. takes brand_url_list, get get all pages for each brand, returns allpages_for_brand_list
+3. takes returns allpages_for_brand_list, get get all urls for detail on page, returns urls_detail_list 
+4. takes urls_detail_list, get describtion text and heading text from detail url
+5. process data (describtion text and heading text) - analyse string for each car offer
+6. create car json with brand, model, mileage, power, year of manufacture, price
+7. save it into dabase 
+8. create api endpoint with filters and comparison 
+"""
