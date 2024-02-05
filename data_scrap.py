@@ -9,7 +9,14 @@ from concurrent.futures import ThreadPoolExecutor
 
 import time
 
+# dictionary for car brands and its models
 import car_models
+
+# database models
+from models import CarBrand, BrandModel, ModelInstance
+from app import db
+
+from database_operations import check_if_car
 
 # SECTION FOR STOPWORDS
 import nltk
@@ -176,15 +183,9 @@ async def process_data(brand, description, heading, price):
     # Perform string analysis, extract information like brand, model, mileage, power, year of manufacture, price
     # Return car JSON
     model = get_model(brand=brand, header=heading)
-    mileage = get_mileage(long_string=description)
-    if not mileage:
-        mileage = get_mileage(long_string=heading)
-    year_manufacture = get_year_manufacture(long_string=description)
-    if not year_manufacture:
-        year_manufacture = get_year_manufacture(long_string=heading)
-    power = get_power(long_string=description)
-    if not power:
-        power = get_power(long_string=heading)
+    mileage = get_mileage(long_string=description) or get_mileage(long_string=heading)
+    year_manufacture = get_year_manufacture(long_string=description) or get_year_manufacture(long_string=heading)
+    power = get_power(long_string=description) or get_power(long_string=heading)
     
     car_data = {
         "brand": brand,
@@ -193,10 +194,42 @@ async def process_data(brand, description, heading, price):
         "mileage": mileage,
         "power": power,
         "price": price,
-        "heading": heading,
     }
     
     return car_data
+
+async def add_car_data(car_data):
+    """
+    Add car data to the database.
+    """
+    # Extract data from car_data dictionary
+    brand_name = car_data["brand"]
+    model_name = car_data["model"]
+    year_manufacture = car_data["year_manufacture"]
+    mileage = car_data["mileage"]
+    power = car_data["power"]
+    price = car_data["price"]
+
+    # Check if the brand already exists in the database
+    brand = CarBrand.query.filter_by(brand=brand_name).first()
+    if not brand:
+        # If the brand doesn't exist, create a new one
+        brand = CarBrand(brand=brand_name)
+        db.session.add(brand)
+        db.session.commit()
+
+    # Check if the model already exists in the database
+    model = BrandModel.query.filter_by(model=model_name, brand_id=brand.id).first()
+    if not model:
+        # If the model doesn't exist, create a new one
+        model = BrandModel(model=model_name, brand_id=brand.id)
+        db.session.add(model)
+        db.session.commit()
+
+    # Add the model instance to the database
+    instance = ModelInstance(year_manufacture=year_manufacture, mileage=mileage, power=power, price=price, model_id=model.id)
+    db.session.add(instance)
+    db.session.commit()
 
 async def main():
     # Step 1: Get car brands URLs
@@ -217,7 +250,8 @@ async def main():
     
     # Step 6: Handle processed data
     for car_data in processed_data:
-        print(car_data)
+        if check_if_car(car_data=car_data):
+            add_car_data(car_data=car_data)
 
 async def run():
     await main()
