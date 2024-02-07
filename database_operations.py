@@ -55,9 +55,7 @@ def fetch_data_into_database(data):
     with SessionLocal() as session: 
         try:
             for item in data:
-                i = 1
                 car = Car(
-                    id=i,
                     brand=item['brand'],
                     model=item['model'],
                     year_manufacture=item['year_manufacture'],
@@ -66,7 +64,6 @@ def fetch_data_into_database(data):
                     price=item['price'],
                 )
                 session.add(car)
-                i += 1
             session.commit()
         except Exception as e:
             session.rollback()
