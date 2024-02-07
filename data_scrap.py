@@ -5,18 +5,13 @@ import re
 import asyncio
 import aiohttp
 
-from concurrent.futures import ThreadPoolExecutor
-
 import time
 
 # dictionary for car brands and its models
 import car_models
 
-# database models
-from models import CarBrand, BrandModel, ModelInstance
-from app import db
+from database_operations import check_if_car, save_to_csv, fetch_data_into_database
 
-from database_operations import check_if_car
 
 # SECTION FOR STOPWORDS
 import nltk
@@ -71,11 +66,20 @@ def get_mileage(long_string: str):
     # Extract mileage from the matches
     mileage = None
     if matches1:  # Check pattern 1 matches first
-        mileage = int(matches1[0].replace(' ', ''))  # Remove spaces and dots from the matched value
+        try:
+            mileage = int(matches1[0].replace(' ', ''))  # Remove spaces and dots from the matched value
+        except ValueError:
+                pass
     elif matches2:  # If pattern 1 doesn't match, check pattern 2 matches
-        mileage = int(matches2[0].replace(' ', '')) * 1000  # Convert 'tis' to thousands
+        try:
+            mileage = int(matches2[0].replace(' ', '')) * 1000  # Convert 'tis' to thousands
+        except ValueError:
+                pass
     elif matches3:
-        mileage = int(matches3[0].replace(' ', '')) * 1000
+        try:
+            mileage = int(matches3[0].replace(' ', '')) * 1000
+        except ValueError:
+                pass
     return mileage
 
 def get_power(long_string: str):
@@ -170,12 +174,17 @@ async def get_descriptions_headings_price(brand_urls):
         price_nc= soup.find('table').find('td', class_='listadvlevo').find('table').find_all('tr')[-1].text
         price_digits = ''.join(re.findall(r'\d+', price_nc))
         price = int(price_digits) if price_digits else None
+
+        is_car = check_if_car(description, heading, price=price)
+        
+        if not is_car:
+            return None
         return (description, heading, price)
 
     tasks = [fetch_and_process(url) for brand, url in brand_urls]
     results = await asyncio.gather(*tasks)
 
-    final_list = [(brand, *result) for (brand, _), result in zip(brand_urls, results)]
+    final_list = [(brand, *result) for (brand, _), result in zip(brand_urls, results)if result is not None]
     return final_list
 
 async def process_data(brand, description, heading, price):
@@ -194,42 +203,10 @@ async def process_data(brand, description, heading, price):
         "mileage": mileage,
         "power": power,
         "price": price,
+        'heading': heading
     }
     
     return car_data
-
-async def add_car_data(car_data):
-    """
-    Add car data to the database.
-    """
-    # Extract data from car_data dictionary
-    brand_name = car_data["brand"]
-    model_name = car_data["model"]
-    year_manufacture = car_data["year_manufacture"]
-    mileage = car_data["mileage"]
-    power = car_data["power"]
-    price = car_data["price"]
-
-    # Check if the brand already exists in the database
-    brand = CarBrand.query.filter_by(brand=brand_name).first()
-    if not brand:
-        # If the brand doesn't exist, create a new one
-        brand = CarBrand(brand=brand_name)
-        db.session.add(brand)
-        db.session.commit()
-
-    # Check if the model already exists in the database
-    model = BrandModel.query.filter_by(model=model_name, brand_id=brand.id).first()
-    if not model:
-        # If the model doesn't exist, create a new one
-        model = BrandModel(model=model_name, brand_id=brand.id)
-        db.session.add(model)
-        db.session.commit()
-
-    # Add the model instance to the database
-    instance = ModelInstance(year_manufacture=year_manufacture, mileage=mileage, power=power, price=price, model_id=model.id)
-    db.session.add(instance)
-    db.session.commit()
 
 async def main():
     # Step 1: Get car brands URLs
@@ -249,9 +226,10 @@ async def main():
     processed_data = await asyncio.gather(*tasks)
     
     # Step 6: Handle processed data
-    for car_data in processed_data:
-        if check_if_car(car_data=car_data):
-            add_car_data(car_data=car_data)
+    save_to_csv(processed_data, 'bazos_data.csv')
+
+    # Step 7: Save data into database 
+    fetch_data_into_database('bazos_data.csv', 'cars')
 
 async def run():
     await main()

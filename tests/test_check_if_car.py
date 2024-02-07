@@ -14,6 +14,8 @@ from  database_operations import check_if_car
 
 ])
 
+
 def test_check_if_car(heading, expected_result):
-    car_data = {'heading': heading}
-    assert check_if_car(car_data) == expected_result
+    model = "Some model"
+    price = 690000
+    assert check_if_car(model, heading, price) == expected_result

@@ -11,6 +11,11 @@ beautifulsoup4 = "*"
 aiohttp = "*"
 nltk = "*"
 pytest = "*"
+pytest-asyncio = "*"
+sqlalchemy-utils = "*"
+aiosqlite = "*"
+greenlet = "*"
+pandas = "*"
 
 [dev-packages]
 

@@ -22,5 +22,5 @@ CAR_MODELS = {
     'toyota': ['aygo', 'yaris', 'auris', 'corolla', 'prius', 'avensis', 'chr', 'rav4', 'highlander', 'land cruiser', 'hilux'],
     'volkswagen': ['up', 'polo', 'golf', 'passat', 'arteon', 't-roc', 'tiguan', 'touareg', 'touran', 'sharan', 'beetle', 'jetta', 'caddy', 'california', 'multivan', 'caravelle', 'amarok'],
     'volvo': ['v40', 'v60', 'v90', 's60', 's90', 'xc40', 'xc60', 'xc90', 'v70', 'xc70'],
-    'mazda': ['2', '3', '6', 'cx-3', 'cx-4', 'cx-5', 'cx-8', 'cx-9', 'mx-5', 'cx-7', 'cx3', 'cx5', 'cx8']
+    'mazda': ['2', '3', '6', 'cx-3', 'cx-4', 'cx-5', 'cx-8', 'cx-9', 'mx-5', 'cx-7', 'cx3', 'cx5', 'cx8', '323']
 }
