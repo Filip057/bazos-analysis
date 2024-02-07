@@ -57,7 +57,7 @@ def fetch_data_into_database(data):
             for item in data:
                 i = 1
                 car = Car(
-                    _id=i,
+                    id=i,
                     brand=item['brand'],
                     model=item['model'],
                     year_manufacture=item['year_manufacture'],
