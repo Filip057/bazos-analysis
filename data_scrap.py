@@ -31,7 +31,7 @@ CAR_BRANDS = ['alfa', 'audi', 'bmw', 'citroen', 'dacia', 'fiat',
               'ford', 'honda', 'hyundai', 'chevrolet', 'kia', 'mazda', 'mercedes', 'mitsubishi', 
               'nissan', 'opel', 'peugeot', 'renault', 'seat', 'suzuki', 'skoda', 'toyota', 'volkswagen'
               'volvo']
-
+# Filter for string, clear it out of stop words
 def preprocess_text(text):
     # Tokenize text, remove stopwords, and convert to lowercase
     tokens = nltk.word_tokenize(text)
@@ -47,8 +47,8 @@ def get_frequency_analysis(string_list: list):
     return word_counts
 
 
-# ANALYSING STRINGS
-
+# ANALYSING STRINGS FNCS
+# Getting data from string with regex
 def get_mileage(long_string: str):
     text = re.sub(r'[^\w\s]', '', long_string.lower())
     words_uned = text.split()
@@ -106,13 +106,14 @@ def get_model(brand, header: str) -> str:
             return match.group(0)
     return None
 
-# ASYNCHRONOUS 
+# ASYNCHRONOUS WEB SCRAPPING
+# Cascade of web srappping to get detail info about car offer 
 
 async def fetch_data(url):
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as response:
             return await response.text()
-
+# getting urls for brands
 async def get_brand_urls():
     # Fetch car brands URLs asynchronously
     brand_url_list = []
@@ -129,6 +130,7 @@ async def get_brand_urls():
 
 # [(bran, brand_url)]
 
+# for each brand getting urls for all their pages
 async def get_all_pages_for_brands(brand_url_list):
     # Fetch all pages for each brand asynchronously
     allpages_for_brand_list = []
@@ -144,6 +146,7 @@ async def get_all_pages_for_brands(brand_url_list):
 
 # [(brand, [all brand url pages])]
 
+# going through brand pages and getting urls for car offers detail
 async def get_urls_for_details(brand_pages):
     async def fetch_and_process(url):
         data = await fetch_data(url)
@@ -165,6 +168,7 @@ async def get_urls_for_details(brand_pages):
 
 # [(brand, [all detail urls])]
 
+# scrapping description, heading
 async def get_descriptions_headings_price(brand_urls):
     async def fetch_and_process(url):
         data = await fetch_data(url)
@@ -187,6 +191,7 @@ async def get_descriptions_headings_price(brand_urls):
     final_list = [(brand, *result) for (brand, _), result in zip(brand_urls, results)if result is not None]
     return final_list
 
+# processing the string and retrieving the data
 async def process_data(brand, description, heading, price):
     # Process data asynchronously
     # Perform string analysis, extract information like brand, model, mileage, power, year of manufacture, price
@@ -208,6 +213,7 @@ async def process_data(brand, description, heading, price):
     
     return car_data
 
+# all together 
 async def main():
     # Step 1: Get car brands URLs
     # brand_urls = await get_brand_urls()

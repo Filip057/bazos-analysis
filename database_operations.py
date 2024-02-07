@@ -4,7 +4,12 @@ from sqlalchemy import create_engine
 from app import Car, Base
 import csv
 
+"""
+Here are functions that i use to operate with database, or somehow related to database
+"""
 
+# This fnc checks if the offer is PROBABLY a car offer
+# trying to select data from tires, disc, car parts... 
 def check_if_car(model, heading, price):
     if model == None:
         return False
@@ -22,7 +27,7 @@ def check_if_car(model, heading, price):
 
 
 import csv
-
+# fnc to save data from web scrap into csv
 def save_to_csv(data, filename):
     with open(filename, 'w', newline='') as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=data[0].keys())
@@ -30,8 +35,7 @@ def save_to_csv(data, filename):
         writer.writerows(data)
 
 
-
-
+# reading data from csv
 def read_csv(filename):
     data = []
     with open(filename, 'r', newline='') as csvfile:
@@ -40,6 +44,8 @@ def read_csv(filename):
             data.append(row)
     return data
 
+
+# fnc that is responsible co adding data into database
 def fetch_data_into_database(data):
     engine = create_engine('sqlite:///bazos_cars.db', pool_pre_ping=True)
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -66,7 +72,7 @@ def fetch_data_into_database(data):
             session.rollback()
             raise e
     
-
+# test data
 SAMPLEDATA = [
     {"brand": "mazda", "model": "3", "year_manufacture": 2022, "mileage": 8000, "power": None, "price": 499900, "heading": "Mazda CX 3, 2022, 8 tis.km"},
     {"brand": "mazda", "model": "CX-5", "year_manufacture": 2018, "mileage": None, "power": 143, "price": 595000, "heading": "Mazda CX-5, AWD, 2.5 SkyActive-G, AT, REVOL.TOP, 1. majitel"},
