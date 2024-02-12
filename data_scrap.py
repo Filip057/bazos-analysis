@@ -10,7 +10,7 @@ import time
 # dictionary for car brands and its models
 import car_models
 
-from database_operations import check_if_car, save_to_csv, fetch_data_into_database
+from database_operations import check_if_car, fetch_data_into_database
 
 
 # SECTION FOR STOPWORDS
@@ -56,7 +56,6 @@ def get_mileage(long_string: str):
     pattern = r'(\d{1,3}(?:\s?\d{3})*(?:\.\d+)?)\s?km'  # Matches numbers with optional thousands separators followed by optional ' km'
     pattern2 = r'(\d{1,3}(?:\s?\d{3})*)(?:\.|\s?tis\.?)\s?km'   # Matches mileage value with 'tis' representing thousands followed by 'km'
     pattern3 = r'(\d{1,3}(?:\s?\d{3})*)(?:\s?xxx\s?km)'
-    pattern4 =r''
 
     # Find all matches of the pattern in the text
     matches1 = re.findall(pattern, text)
@@ -219,7 +218,7 @@ async def main():
     # brand_urls = await get_brand_urls()
     
     # Step 2: Get all pages for each brand
-    brand_pages = await get_all_pages_for_brands([('mazda', 'https://auto.bazos.cz/mazda/')])
+    brand_pages = await get_all_pages_for_brands([('volvo', 'https://auto.bazos.cz/volvo/')])
     
     # Step 3: Get URLs for details on each page concurrently
     urls_detail_list = await get_urls_for_details(brand_pages)
@@ -231,11 +230,10 @@ async def main():
     tasks = [process_data(brand, description, heading, price) for brand, description, heading, price in descriptions_headings_price_list]
     processed_data = await asyncio.gather(*tasks)
     
-    # Step 6: Handle processed data
-    save_to_csv(processed_data, 'bazos_data.csv')
+    
 
-    # Step 7: Save data into database 
-    fetch_data_into_database('bazos_data.csv', 'cars')
+    # Step 6: Save data into database 
+    await fetch_data_into_database(data=processed_data)
 
 async def run():
     await main()

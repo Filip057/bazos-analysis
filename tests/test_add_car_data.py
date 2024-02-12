@@ -8,19 +8,18 @@ from database_operations import save_to_csv, fetch_data_into_database
 from sqlalchemy.orm import sessionmaker
 
 from sqlalchemy import create_engine
-from app import Base, Car
+from app import Car
+
+from database.model import Base
 
 sys.path.append('/Users/filiphome/bazos analysis')
-
-# Define a test database URL
-TEST_DATABASE_URL = 'sqlite:///test_bazos_cars.db'
 
 @pytest.fixture
 def sample_data():
     # Create a sample data list for testing
     return [
-        {"brand": "mazda", "model": "3", "year_manufacture": 2022, "mileage": 8000, "power": None, "price": 499900, "heading": "Mazda CX 3, 2022, 8 tis.km"},
-        {"brand": "mazda", "model": "CX-5", "year_manufacture": 2018, "mileage": None, "power": 143, "price": 595000, "heading": "Mazda CX-5, AWD, 2.5 SkyActive-G, AT, REVOL.TOP, 1. majitel"},
+        {"brand": "mazda", "model": "6", "year_manufacture": 2018, "mileage": 58000, "power": 120, "price": 799900, "heading": "Mazda CX 3, 2022, 8 tis.km"},
+        {"brand": "mazda", "model": "CX-3", "year_manufacture": 2015, "mileage": None, "power": 143, "price": 695000, "heading": "Mazda CX-5, AWD, 2.5 SkyActive-G, AT, REVOL.TOP, 1. majitel"},
         # Add more sample data here
     ]
 

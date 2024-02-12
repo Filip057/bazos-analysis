@@ -183,6 +183,21 @@ STRING_LIST = [
     'Mazda CX 5 2,2 D 110 kW v provozu od 9/2014 najeto 170 000 km nafta výkon 110 kW STK 1/2025 servisní knížka šestistupňová převodovka možnost sjednání prodloužené záruky kryjící mechanické a elektrické poruchy vozu až na 36 měsíců s vozem je možno ihned odjet, nejvýhodnější pojištění a převozní značku vyřídíme na místě, přihlášení pouze 800 Kč Výbava: - automatická klimatizace - navigace - tempomat - bezklíčové ovládání - hlídání mrtvého úhlu - vyhřívané sedačky - BOSE premium sound - parkovací senzory - multifunkční volant - originál rádio - 4x el. okna - el. zrcátka - el. sklopná zrcátka - vyhřívaná zrcátka - 6x airbag - palubní počítač - dešťový senzor - alu kola 17 - automatické svícení - mlhovky - bluetooth prohlédněte si i další naše vozy na prodej sms a maily NEPIŠTE, pouze volat, děkuji'
 ]
 
+"""
+# test data
+SAMPLEDATA = [
+    {"brand": "mazda", "model": "3", "year_manufacture": 2022, "mileage": 8000, "power": None, "price": 499900, "heading": "Mazda CX 3, 2022, 8 tis.km"},
+    {"brand": "mazda", "model": "CX-5", "year_manufacture": 2018, "mileage": None, "power": 143, "price": 595000, "heading": "Mazda CX-5, AWD, 2.5 SkyActive-G, AT, REVOL.TOP, 1. majitel"},
+]
+
+if __name__ == "__main__":
+    # test of insertion 
+    filename = 'test_data.csv'
+    data = read_csv(filename)
+    fetch_data_into_database(data) 
+"""
+
+
 if __name__ == '__main__':
     # brand_list = get_all_brands_url()
     # all_pages_dict = get_all_pages(url_brand_list=brand_list)

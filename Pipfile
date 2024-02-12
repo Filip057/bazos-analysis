@@ -16,6 +16,10 @@ sqlalchemy-utils = "*"
 aiosqlite = "*"
 greenlet = "*"
 pandas = "*"
+mysql-connector-python = "*"
+python-dotenv = "*"
+aiomysql = "*"
+flask-wtf = "*"
 
 [dev-packages]
 

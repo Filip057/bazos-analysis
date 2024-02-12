@@ -1,0 +1,38 @@
+<!-- car_comparison.html -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Car Comparison</title>
+</head>
+<body>
+    <h1>Car Comparison</h1>
+    <form method="post">
+        {{ form.hidden_tag() }}
+        <div>
+            {{ form.brand.label }}: {{ form.brand }}
+        </div>
+        <div>
+            {{ form.model.label }}: {{ form.model }}
+        </div>
+        <div>
+            {{ form.price.label }}: {{ form.price }}
+        </div>
+        <div>
+            {{ form.year.label }}: {{ form.year }}
+        </div>
+        <div>
+            {{ form.y_plusminus.label }}: {{ form.y_plusminus }}
+        </div>
+        <div>
+            {{ form.mileage.label }}: {{ form.mileage }}
+        </div>
+        <div>
+            {{ form.m_pct_plusminus.label }}: {{ form.m_pct_plusminus }}
+        </div>
+        <button type="submit">Submit</button>
+    </form>
+</body>
+</html>
