@@ -1,22 +1,25 @@
 from dotenv import load_dotenv
 import os
 import secrets
+
 from flask import Flask, jsonify, request, render_template, redirect, url_for
+from flask_restful import Api, Resource
 from flask_wtf import FlaskForm
 from flask_wtf.csrf import CSRFProtect
+
 from wtforms import StringField, IntegerField, SubmitField
 from wtforms.validators import DataRequired, Optional
 
 
 from sqlalchemy import create_engine, func
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import QueuePool
+
 
 from database.model import Base, Car
 
 # MySQL connection settings
 load_dotenv()
-MYSQL_USER = 'root'
+MYSQL_USER = os.getenv('MYSQL_USER')
 MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD')
 
 # MySQL connection string
@@ -41,15 +44,12 @@ Base.metadata.bind = engine
 
 @app.route("/")
 def hello_world():
-    return "<p>Hello, World!</p>"
+    return render_template("index.html")
 
 @app.route('/cars', methods=['GET'])
 def get_cars():
     
-    DBSession = sessionmaker(bind=engine)
-    session = DBSession()
-    cars = session.query(Car).all()
-    return jsonify([car.serialize() for car in cars])
+    
 
 @app.route('/cars/<int:car_id>', methods=['GET'])
 def get_car(car_id):
@@ -101,7 +101,7 @@ def get_car_stats(brand, model):
     return jsonify(response)
    
 
-@app.route('/compare-car/<brand>/<model>/<int:price>', methods=['GET'])
+@app.route('/car-compare/<brand>/<model>/<int:price>', methods=['GET'])
 def get_comparison(brand, model, price):
     DBSession = sessionmaker(bind=engine)
     session = DBSession()
@@ -162,7 +162,20 @@ class CarComparisonForm(FlaskForm):
     submit = SubmitField('Compare')
 
 
+class CarListApi(Resource):
+    def get(self):
+        DBSession = sessionmaker(bind=engine)
+        session = DBSession()
+        cars = session.query(Car).all()
+        return {'cars': [car.serialize() for car in cars]}
 
+class CarApi()
+
+class CarCompare(Resource):
+    pass
+
+class CarStats(Resource):
+    pass
 
 if __name__ == '__main__':
     app.run(debug=True)
