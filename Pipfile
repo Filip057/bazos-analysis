@@ -21,6 +21,7 @@ python-dotenv = "*"
 aiomysql = "*"
 flask-wtf = "*"
 flask-restful = "*"
+flask-cors = "*"
 
 [dev-packages]
 

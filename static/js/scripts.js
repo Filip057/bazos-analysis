@@ -24,3 +24,25 @@ window.addEventListener('DOMContentLoaded', event => {
     }
 
 });
+
+
+
+document.addEventListener("DOMContentLoaded", function() {
+    const form = document.getElementById("carComparisonForm");
+    form.addEventListener("submit", function(e) {
+        e.preventDefault(); // Prevent default form submission
+
+        const formData = new FormData(form);
+        const data = new URLSearchParams(formData).toString();
+
+        fetch(`/api/car-compare?${data}`, {
+            method: 'GET', // Or 'POST', depending on your API endpoint
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log(data); // Process and display the response
+            // For example, display the results in a <div> or alert
+        })
+        .catch(error => console.error('Error:', error));
+    });
+});
