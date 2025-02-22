@@ -108,10 +108,9 @@ def get_model(brand, header: str) -> str:
 # ASYNCHRONOUS WEB SCRAPPING
 # Cascade of web srappping to get detail info about car offer 
 
-async def fetch_data(url):
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            return await response.text()
+async def fetch_data(url, session):
+    async with session.get(url) as response:
+        return await response.text()
 # getting urls for brands
 async def get_brand_urls():
     # Fetch car brands URLs asynchronously
@@ -130,12 +129,12 @@ async def get_brand_urls():
 # [(bran, brand_url)]
 
 # for each brand getting urls for all their pages
-async def get_all_pages_for_brands(brand_url_list):
+async def get_all_pages_for_brands(brand_url_list, session):
     # Fetch all pages for each brand asynchronously
     allpages_for_brand_list = []
     for brand_url in brand_url_list:
         brand, base_url = brand_url
-        data = await fetch_data(base_url)
+        data = await fetch_data(base_url, session)
         soup = BeautifulSoup(data, 'html.parser')
         num_of_objs_text = soup.find('div', class_='inzeratynadpis').text.split('z ')[1].strip()
         num_of_objs = int(num_of_objs_text.replace(' ', ''))
@@ -146,9 +145,9 @@ async def get_all_pages_for_brands(brand_url_list):
 # [(brand, [all brand url pages])]
 
 # going through brand pages and getting urls for car offers detail
-async def get_urls_for_details(brand_pages):
+async def get_urls_for_details(brand_pages, session):
     async def fetch_and_process(url):
-        data = await fetch_data(url)
+        data = await fetch_data(url, session)
         soup = BeautifulSoup(data, 'html.parser')
         headings = soup.find_all('div', class_='inzeraty inzeratyflex')
         urls_detail_list = []
@@ -168,38 +167,36 @@ async def get_urls_for_details(brand_pages):
 # [(brand, [all detail urls])]
 
 # scrapping description, heading
-async def get_descriptions_headings_price(brand_urls):
-    async def fetch_and_process(url):
-        data = await fetch_data(url)
+async def get_descriptions_headings_price(brand_urls, session):
+    async def fetch_and_process(brand, url):
+        data = await fetch_data(url, session)
         soup = BeautifulSoup(data, 'html.parser')
+
         description = soup.find('div', class_='popisdetail').text.strip()
         heading = soup.find(class_="nadpisdetail").text.strip()
-        price_nc= soup.find('table').find('td', class_='listadvlevo').find('table').find_all('tr')[-1].text
+        price_nc = soup.find('table').find('td', class_='listadvlevo').find('table').find_all('tr')[-1].text
         price_digits = ''.join(re.findall(r'\d+', price_nc))
         price = int(price_digits) if price_digits else None
 
         is_car = check_if_car(description, heading, price=price)
-        
         if not is_car:
             return None
-        return (description, heading, price)
 
-    tasks = [fetch_and_process(url) for brand, url in brand_urls]
+        return brand, url, description, heading, price  # Return URL as well
+
+    tasks = [fetch_and_process(brand, url) for brand, url in brand_urls]
     results = await asyncio.gather(*tasks)
 
-    final_list = [(brand, *result) for (brand, _), result in zip(brand_urls, results)if result is not None]
+    final_list = [result for result in results if result is not None]
     return final_list
 
 # processing the string and retrieving the data
-async def process_data(brand, description, heading, price):
-    # Process data asynchronously
-    # Perform string analysis, extract information like brand, model, mileage, power, year of manufacture, price
-    # Return car JSON
+async def process_data(brand, url, description, heading, price):
     model = get_model(brand=brand, header=heading)
     mileage = get_mileage(long_string=description) or get_mileage(long_string=heading)
     year_manufacture = get_year_manufacture(long_string=description) or get_year_manufacture(long_string=heading)
     power = get_power(long_string=description) or get_power(long_string=heading)
-    
+
     car_data = {
         "brand": brand,
         "model": model,
@@ -207,33 +204,35 @@ async def process_data(brand, description, heading, price):
         "mileage": mileage,
         "power": power,
         "price": price,
-        'heading': heading
+        "heading": heading,
+        "url": url  # Add URL
     }
-    
     return car_data
+
 
 # all together 
 async def main():
     # Step 1: Get car brands URLs
     # brand_urls = await get_brand_urls()
-    
-    # Step 2: Get all pages for each brand
-    brand_pages = await get_all_pages_for_brands([('volvo', 'https://auto.bazos.cz/volvo/')])
-    
-    # Step 3: Get URLs for details on each page concurrently
-    urls_detail_list = await get_urls_for_details(brand_pages)
-    
-    # Step 4: Get descriptions, headings, and prices concurrently
-    descriptions_headings_price_list = await get_descriptions_headings_price(urls_detail_list)
-    
-    # Step 5: Create tasks for processing data asynchronously
-    tasks = [process_data(brand, description, heading, price) for brand, description, heading, price in descriptions_headings_price_list]
-    processed_data = await asyncio.gather(*tasks)
-    
-    
+    async with aiohttp.ClientSession() as session:
+        # Step 2: Get all pages for each brand
+        brand_pages = await get_all_pages_for_brands([('chevrolet', 'https://auto.bazos.cz/chevrolet/')], session)
+        
+        # Step 3: Get URLs for details on each page concurrently
+        urls_detail_list = await get_urls_for_details(brand_pages, session)
+        
+        # Step 4: Get descriptions, headings, and prices concurrently
+        descriptions_headings_price_list = await get_descriptions_headings_price(urls_detail_list, session)
+        
+        # Step 5: Create tasks for processing data asynchronously
+        tasks = [process_data(brand, description, heading, price, url) for brand, description, heading, price, url in descriptions_headings_price_list
+]
+        processed_data = await asyncio.gather(*tasks)
+        
+        
 
-    # Step 6: Save data into database 
-    await fetch_data_into_database(data=processed_data)
+        # Step 6: Save data into database 
+        await fetch_data_into_database(data=processed_data)
 
 async def run():
     await main()

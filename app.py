@@ -53,7 +53,7 @@ def hello_world():
     return render_template("index.html")
    
 
-@app.route('/car-comparison', methods=['GET', 'POST'])
+@app.route('/car-compare', methods=['GET', 'POST'])
 def car_comparison():
     form = CarComparisonForm()
     if form.validate_on_submit():
