@@ -2,6 +2,7 @@ from datetime import datetime
 import re
 import csv
 import asyncio
+import logging
 from typing import Optional, Dict, List
 
 from sqlalchemy.orm import sessionmaker, scoped_session
@@ -14,6 +15,9 @@ import aiomysql
 
 import os
 from config import get_config
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # Load configuration
 config = get_config()
@@ -103,7 +107,7 @@ def get_model_id_sync(session, brand_name: str, model_name: Optional[str]) -> Op
 async def fetch_data_into_database(data: List[Dict], batch_size: int = 100):
     """Optimized async database insertion with caching"""
     if not data:
-        print("No data to save")
+        logger.warning("No data to save")
         return
 
     # Pre-load all model IDs in a single synchronous block to avoid blocking in async loop
@@ -192,7 +196,7 @@ async def fetch_data_into_database(data: List[Dict], batch_size: int = 100):
                         inserted_count += len(values)
 
                 await conn.commit()
-                print(f"✓ Inserted/Updated {inserted_count} records in database")
+                logger.info(f"✓ Inserted/Updated {inserted_count} records in database")
 
 
 
