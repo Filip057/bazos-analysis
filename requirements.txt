@@ -31,6 +31,7 @@ pytz==2024.2
 regex==2024.11.6
 six==1.17.0
 soupsieve==2.6
+spacy==3.8.2
 SQLAlchemy==2.0.37
 tqdm==4.67.1
 typing_extensions==4.12.2

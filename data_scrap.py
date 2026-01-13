@@ -1,6 +1,7 @@
 from collections import Counter
 from bs4 import BeautifulSoup
 import re
+import logging
 
 import asyncio
 import aiohttp
@@ -17,6 +18,16 @@ from database_operations import check_if_car, fetch_data_into_database
 # Progress tracking
 from tqdm.asyncio import tqdm as async_tqdm
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('scraper.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # SECTION FOR STOPWORDS
 import nltk
@@ -134,14 +145,14 @@ async def fetch_data(url: str, session: aiohttp.ClientSession, semaphore: asynci
             if attempt < RETRY_ATTEMPTS - 1:
                 await asyncio.sleep(RETRY_DELAY * (attempt + 1))
                 continue
-            print(f"Timeout fetching {url} after {RETRY_ATTEMPTS} attempts")
+            logger.warning(f"Timeout fetching {url} after {RETRY_ATTEMPTS} attempts")
         except aiohttp.ClientError as e:
             if attempt < RETRY_ATTEMPTS - 1:
                 await asyncio.sleep(RETRY_DELAY * (attempt + 1))
                 continue
-            print(f"Error fetching {url}: {e}")
+            logger.error(f"Error fetching {url}: {e}")
         except Exception as e:
-            print(f"Unexpected error fetching {url}: {e}")
+            logger.error(f"Unexpected error fetching {url}: {e}")
             break
     return None
 # getting urls for brands
@@ -150,7 +161,7 @@ async def get_brand_urls(session: aiohttp.ClientSession, semaphore: asyncio.Sema
     brand_url_list = []
     data = await fetch_data(CAR_URL, session, semaphore)
     if not data:
-        print("Failed to fetch brand URLs")
+        logger.error("Failed to fetch brand URLs")
         return brand_url_list
 
     soup = BeautifulSoup(data, 'html.parser')
@@ -181,7 +192,7 @@ async def get_all_pages_for_brands(brand_url_list: List[Tuple[str, str]], sessio
             pages = [f"{base_url}{x}/" for x in range(20, num_of_objs, 20)]
             return (brand, pages)
         except (AttributeError, IndexError, ValueError) as e:
-            print(f"Error parsing pages for {brand}: {e}")
+            logger.warning(f"Error parsing pages for {brand}: {e}")
             return (brand, [])
 
     # CRITICAL FIX: Process all brands in parallel instead of sequentially
@@ -298,37 +309,42 @@ async def main():
     timeout = ClientTimeout(total=REQUEST_TIMEOUT)
 
     async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
-        print("Starting scraping process...")
+        logger.info("="*60)
+        logger.info("Starting scraping process...")
+        logger.info("="*60)
 
         # Step 1: Get car brands URLs (uncomment to scrape all brands)
         # brand_urls = await get_brand_urls(session, semaphore)
         # For testing, use a single brand:
         brand_urls = [('chevrolet', 'https://auto.bazos.cz/chevrolet/')]
+        logger.info(f"Target brands: {', '.join([b[0] for b in brand_urls])}")
 
         # Step 2: Get all pages for each brand IN PARALLEL
-        print(f"\nFetching pages for {len(brand_urls)} brand(s)...")
+        logger.info(f"Fetching pages for {len(brand_urls)} brand(s)...")
         brand_pages = await get_all_pages_for_brands(brand_urls, session, semaphore)
+        total_pages = sum(len(pages) for _, pages in brand_pages)
+        logger.info(f"Found {total_pages} pages to scrape")
 
         # Step 3: Get URLs for details on each page with chunked processing
-        print("\nFetching detail URLs...")
+        logger.info("Fetching detail URLs...")
         urls_detail_list = await get_urls_for_details(brand_pages, session, semaphore)
-        print(f"Found {len(urls_detail_list)} car listings")
+        logger.info(f"Found {len(urls_detail_list)} car listings")
 
         # Step 4: Get descriptions, headings, and prices with chunked processing
-        print("\nScraping car details...")
+        logger.info("Scraping car details...")
         descriptions_headings_price_list = await get_descriptions_headings_price(urls_detail_list, session, semaphore)
-        print(f"Successfully scraped {len(descriptions_headings_price_list)} cars")
+        logger.info(f"Successfully scraped {len(descriptions_headings_price_list)} cars")
 
         # Step 5: Process data to extract structured information
-        print("\nProcessing data...")
+        logger.info("Processing data...")
         tasks = [process_data(brand, url, description, heading, price)
                  for brand, url, description, heading, price in descriptions_headings_price_list]
         processed_data = await asyncio.gather(*tasks)
 
         # Step 6: Save data into database
-        print("\nSaving to database...")
+        logger.info("Saving to database...")
         await fetch_data_into_database(data=processed_data)
-        print(f"✓ Successfully saved {len(processed_data)} cars to database")
+        logger.info(f"✓ Successfully saved {len(processed_data)} cars to database")
 
 async def run():
     await main()
@@ -336,14 +352,14 @@ async def run():
 
 if __name__ == "__main__":
     start_time = time.time()
-    print("=" * 60)
-    print("BAZOS CAR SCRAPER - OPTIMIZED VERSION")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("BAZOS CAR SCRAPER - OPTIMIZED VERSION")
+    logger.info("=" * 60)
     asyncio.run(run())
     end_time = time.time()
     elapsed = end_time - start_time
-    print("\n" + "=" * 60)
-    print(f"✓ Execution time: {elapsed:.2f} seconds ({elapsed/60:.2f} minutes)")
-    print("=" * 60)
+    logger.info("\n" + "=" * 60)
+    logger.info(f"✓ Execution time: {elapsed:.2f} seconds ({elapsed/60:.2f} minutes)")
+    logger.info("=" * 60)
     
 
