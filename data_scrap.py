@@ -216,7 +216,7 @@ async def main():
     # brand_urls = await get_brand_urls()
     async with aiohttp.ClientSession() as session:
         # Step 2: Get all pages for each brand
-        brand_pages = await get_all_pages_for_brands([('chevrolet', 'https://auto.bazos.cz/chevrolet/')], session)
+        brand_pages = await get_all_pages_for_brands([('chevrolet', 'https://auto.bazos.cz/toyota/')], session)
         
         # Step 3: Get URLs for details on each page concurrently
         urls_detail_list = await get_urls_for_details(brand_pages, session)
