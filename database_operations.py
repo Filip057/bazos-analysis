@@ -13,14 +13,13 @@ import aiomysql
 
 
 import os
-from dotenv import load_dotenv
+from config import get_config
 
-load_dotenv()
-MYSQL_USER = 'root'
+# Load configuration
+config = get_config()
+
+# Get database password from environment
 MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD')
-
-# Define a test database URL
-DATABASE_URI = f'mysql+mysqlconnector://{MYSQL_USER}:{MYSQL_PASSWORD}@localhost/bazos_cars'
 
 
 # Scoped session configuration
