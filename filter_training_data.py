@@ -14,7 +14,6 @@ Usage:
 import json
 import argparse
 import re
-from typing import Optional
 
 # Regex patterns (same as scraper)
 MILEAGE_PATTERN_1 = re.compile(r'(\d{1,3}(?:\s?\d{3})*(?:\.\d+)?)\s?km', re.IGNORECASE)
@@ -24,20 +23,20 @@ POWER_PATTERN = re.compile(r'(\d{1,3})\s?kw', re.IGNORECASE)
 YEAR_PATTERN = re.compile(r'(?:rok výroby|R\.?V\.?|rok|r\.?v\.?|výroba)?\s*(\d{4})\b', re.IGNORECASE)
 
 
-def get_mileage(text: str) -> Optional[int]:
+def get_mileage(text: str) -> bool:
     """Check if mileage exists"""
     text = re.sub(r'[^\w\s]', '', text.lower())
     if MILEAGE_PATTERN_1.search(text) or MILEAGE_PATTERN_2.search(text) or MILEAGE_PATTERN_3.search(text):
         return True
-    return None
+    return False
 
 
-def get_year(text: str) -> Optional[int]:
+def get_year(text: str) -> bool:
     """Check if year exists"""
     return YEAR_PATTERN.search(text) is not None
 
 
-def get_power(text: str) -> Optional[int]:
+def get_power(text: str) -> bool:
     """Check if power exists"""
     text = re.sub(r'[^\w\s]', '', text.lower())
     return POWER_PATTERN.search(text) is not None
