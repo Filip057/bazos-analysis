@@ -3,7 +3,9 @@ Filter Training Data - Keep Only Rich Examples
 ==============================================
 
 This script filters out examples that don't have useful data.
-Only keeps examples where regex found at least 2/3 fields.
+Only keeps examples where regex found at least 1/4 fields.
+
+Detects: Mileage, Year, Power, Fuel Type
 
 This way you don't waste time labeling empty examples!
 
@@ -14,7 +16,6 @@ Usage:
 import json
 import argparse
 import re
-from typing import Optional
 
 # Regex patterns (same as scraper)
 MILEAGE_PATTERN_1 = re.compile(r'(\d{1,3}(?:\s?\d{3})*(?:\.\d+)?)\s?km', re.IGNORECASE)
@@ -22,25 +23,31 @@ MILEAGE_PATTERN_2 = re.compile(r'(\d{1,3}(?:\s?\d{3})*)(?:\.|\s?tis\.?)\s?km', r
 MILEAGE_PATTERN_3 = re.compile(r'(\d{1,3}(?:\s?\d{3})*)(?:\s?xxx\s?km)', re.IGNORECASE)
 POWER_PATTERN = re.compile(r'(\d{1,3})\s?kw', re.IGNORECASE)
 YEAR_PATTERN = re.compile(r'(?:rok výroby|R\.?V\.?|rok|r\.?v\.?|výroba)?\s*(\d{4})\b', re.IGNORECASE)
+FUEL_PATTERN = re.compile(r'\b(benzin|benzín|nafta|diesel|dýzl|naftak|tdi|tsi)\b', re.IGNORECASE)
 
 
-def get_mileage(text: str) -> Optional[int]:
+def get_mileage(text: str) -> bool:
     """Check if mileage exists"""
     text = re.sub(r'[^\w\s]', '', text.lower())
     if MILEAGE_PATTERN_1.search(text) or MILEAGE_PATTERN_2.search(text) or MILEAGE_PATTERN_3.search(text):
         return True
-    return None
+    return False
 
 
-def get_year(text: str) -> Optional[int]:
+def get_year(text: str) -> bool:
     """Check if year exists"""
     return YEAR_PATTERN.search(text) is not None
 
 
-def get_power(text: str) -> Optional[int]:
+def get_power(text: str) -> bool:
     """Check if power exists"""
     text = re.sub(r'[^\w\s]', '', text.lower())
     return POWER_PATTERN.search(text) is not None
+
+
+def get_fuel(text: str) -> bool:
+    """Check if fuel type exists"""
+    return FUEL_PATTERN.search(text) is not None
 
 
 def analyze_example(text: str) -> dict:
@@ -48,30 +55,32 @@ def analyze_example(text: str) -> dict:
     has_mileage = get_mileage(text)
     has_year = get_year(text)
     has_power = get_power(text)
+    has_fuel = get_fuel(text)
 
-    fields_found = sum([has_mileage, has_year, has_power])
+    fields_found = sum([has_mileage, has_year, has_power, has_fuel])
 
     return {
         'mileage': has_mileage,
         'year': has_year,
         'power': has_power,
+        'fuel': has_fuel,
         'fields_found': fields_found
     }
 
 
-def filter_training_data(input_file: str, output_file: str, min_fields: int = 2):
+def filter_training_data(input_file: str, output_file: str, min_fields: int = 1):
     """
     Filter training data to keep only rich examples.
 
     Args:
         input_file: Input JSON file from scraper
-        min_fields: Minimum fields required (default: 2 out of 3)
+        min_fields: Minimum fields required (default: 1 out of 4)
     """
     print(f"\n{'='*60}")
     print(f"Filtering Training Data")
     print(f"{'='*60}")
     print(f"Input: {input_file}")
-    print(f"Minimum fields required: {min_fields}/3")
+    print(f"Minimum fields required: {min_fields}/4")
     print(f"{'='*60}\n")
 
     # Load scraped data
@@ -82,7 +91,7 @@ def filter_training_data(input_file: str, output_file: str, min_fields: int = 2)
 
     # Analyze each example
     filtered = []
-    stats = {0: 0, 1: 0, 2: 0, 3: 0}
+    stats = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
 
     for item in data:
         text = item['text']
@@ -98,10 +107,11 @@ def filter_training_data(input_file: str, output_file: str, min_fields: int = 2)
     # Show statistics
     print(f"\n📊 Data Quality Analysis:")
     print(f"{'='*60}")
-    print(f"Examples with 3/3 fields: {stats[3]:4d} ({stats[3]/len(data)*100:.1f}%) ⭐⭐⭐")
-    print(f"Examples with 2/3 fields: {stats[2]:4d} ({stats[2]/len(data)*100:.1f}%) ⭐⭐")
-    print(f"Examples with 1/3 fields: {stats[1]:4d} ({stats[1]/len(data)*100:.1f}%) ⭐")
-    print(f"Examples with 0/3 fields: {stats[0]:4d} ({stats[0]/len(data)*100:.1f}%) ❌")
+    print(f"Examples with 4/4 fields: {stats[4]:4d} ({stats[4]/len(data)*100:.1f}%) ⭐⭐⭐⭐")
+    print(f"Examples with 3/4 fields: {stats[3]:4d} ({stats[3]/len(data)*100:.1f}%) ⭐⭐⭐")
+    print(f"Examples with 2/4 fields: {stats[2]:4d} ({stats[2]/len(data)*100:.1f}%) ⭐⭐")
+    print(f"Examples with 1/4 fields: {stats[1]:4d} ({stats[1]/len(data)*100:.1f}%) ⭐")
+    print(f"Examples with 0/4 fields: {stats[0]:4d} ({stats[0]/len(data)*100:.1f}%) ❌")
     print(f"{'='*60}")
     print(f"\nFiltered: {len(filtered)} examples kept (with {min_fields}+ fields)")
     print(f"Removed:  {len(data) - len(filtered)} examples (too sparse)")
@@ -128,11 +138,12 @@ def filter_training_data(input_file: str, output_file: str, min_fields: int = 2)
     print(f"\n📝 Sample of filtered examples (first 3):\n")
     for i, item in enumerate(filtered[:3], 1):
         analysis = analyze_example(item['text'])
-        print(f"{i}. Fields: {analysis['fields_found']}/3")
+        print(f"{i}. Fields: {analysis['fields_found']}/4")
         print(f"   Has: ", end="")
         if analysis['mileage']: print("✓ Mileage ", end="")
         if analysis['year']: print("✓ Year ", end="")
-        if analysis['power']: print("✓ Power", end="")
+        if analysis['power']: print("✓ Power ", end="")
+        if analysis['fuel']: print("✓ Fuel", end="")
         print(f"\n   Text: {item['text'][:80]}...\n")
 
     print(f"\n🎯 Next step:")
@@ -159,9 +170,9 @@ def main():
     parser.add_argument(
         "--min-fields",
         type=int,
-        default=2,
-        choices=[1, 2, 3],
-        help="Minimum fields required (1, 2, or 3). Default: 2"
+        default=1,
+        choices=[1, 2, 3, 4],
+        help="Minimum fields required (1, 2, 3, or 4). Default: 1"
     )
 
     args = parser.parse_args()
