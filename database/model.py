@@ -95,7 +95,8 @@ class Car(Base):
 # ENGINE
 engine = create_engine(DATABASE_URI)
 
-connection = engine.connect()
+# Don't connect immediately - only when actually needed
+# connection = engine.connect()  # Removed - connects lazily now
 
-# Create the tables in the database
+# Create the tables in the database (only if connected)
 Base.metadata.create_all(engine)
