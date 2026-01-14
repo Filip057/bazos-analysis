@@ -6,6 +6,10 @@ This tool helps you create training data for the ML model.
 It's educational and shows you how to prepare data for machine learning.
 
 Usage:
+    # Label from filtered JSON file (recommended - preserves full text)
+    python label_data.py --input filtered_training_skoda.json --output training_data_labeled.json --limit 50
+
+    # Or from text file (old format)
     python label_data.py --input descriptions.txt --output training_data.json
 """
 
@@ -87,13 +91,27 @@ class DataLabeler:
         Label multiple texts from a file.
 
         Args:
-            input_file: Text file with one description per line
+            input_file: JSON file from filter or text file with one description per line
             output_file: JSON file to save labeled data
             limit: Maximum number of texts to label
         """
-        # Read input texts
-        with open(input_file, 'r', encoding='utf-8') as f:
-            texts = [line.strip() for line in f if line.strip()]
+        # Read input texts - support both JSON and text files
+        if input_file.endswith('.json'):
+            # Read from JSON (filtered data format)
+            with open(input_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                texts = [item['text'] for item in data]
+        else:
+            # Read from text file (old format)
+            with open(input_file, 'r', encoding='utf-8') as f:
+                # Read entire file and split by double newline or use separator
+                content = f.read()
+                # Try to split by common separator patterns
+                if '\n---\n' in content:
+                    texts = [text.strip() for text in content.split('\n---\n') if text.strip()]
+                else:
+                    # Fall back to line by line (old behavior)
+                    texts = [line.strip() for line in content.split('\n') if line.strip()]
 
         if limit:
             texts = texts[:limit]
@@ -134,9 +152,18 @@ class DataLabeler:
                 self.labeled_data = json.load(f)
             print(f"✓ Loaded {len(self.labeled_data)} previously labeled examples")
 
-        # Get texts that aren't labeled yet
-        with open(input_file, 'r', encoding='utf-8') as f:
-            all_texts = [line.strip() for line in f if line.strip()]
+        # Get texts that aren't labeled yet - support both JSON and text files
+        if input_file.endswith('.json'):
+            with open(input_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                all_texts = [item['text'] for item in data]
+        else:
+            with open(input_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+                if '\n---\n' in content:
+                    all_texts = [text.strip() for text in content.split('\n---\n') if text.strip()]
+                else:
+                    all_texts = [line.strip() for line in content.split('\n') if line.strip()]
 
         labeled_texts = {text for text, _ in self.labeled_data}
         remaining_texts = [t for t in all_texts if t not in labeled_texts]
