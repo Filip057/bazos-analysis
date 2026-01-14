@@ -1,0 +1,359 @@
+[
+  [
+    "Škoda Karoq 2.0 TDi,110 kW,DSG,Sportline,4x4,LED,DPH,tažné. Prodám Škoda Karoq 2.0 TDi, 4x4 (nafta) o výkonu 110 kW, ve výbavě Sportline, v kombinaci se 7 stupňovou automatickou převodovkou DSG, pohonem 4x4, Full LED Matrixovými automatickými světlomety, vyhřívaným čelním oknem, adaptivním tempomatem, dvojitými skly, prémiovým ozvučením Canton, automatickým přídavným topením Webasto a el.tažným zařízením.",
+    {
+      "entities": [
+        [
+          20,
+          26,
+          "POWER"
+        ],
+        [
+          93,
+          98,
+          "FUEL"
+        ]
+      ]
+    }
+  ],
+  [
+    "Vůz je po 1.majiteli!",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "Vozidlo od oficiálního dealera vozů Škoda!",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "Vůz je pravidelně servisován pouze ve Škoda auto-dokládám servisní knihou!",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "Rok výroby: 02/2021 (jedná se o faceliftový model)",
+    {
+      "entities": [
+        [
+          0,
+          19,
+          "YEAR"
+        ]
+      ]
+    }
+  ],
+  [
+    "Aktuálně najeto: 118 887 km",
+    {
+      "entities": [
+        [
+          17,
+          27,
+          "MILEAGE"
+        ]
+      ]
+    }
+  ],
+  [
+    "Další servisní interval až za 15 000 km",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "Barva: stříbrná perleťová metalíza",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "Motor: 2.0 TDi, 110 kW",
+    {
+      "entities": [
+        [
+          16,
+          22,
+          "POWER"
+        ],
+        [
+          11,
+          14,
+          "FUEL"
+        ]
+      ]
+    }
+  ],
+  [
+    "Pohon: 4x4",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "Výbava: Sportline",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "Bonus: na voze lze prodloužit záruku až na 3 roky",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "Bonus II: na voze je proveden kompletní servis – olej, filtry, DSG olej, Haldex+diferenciál, brzdy!",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "Výbava: Sportline: pohon 4x4, aut.přídavné topení Webasto, el.tažné zařízení, vyhřívané čelní okno, příplatkové prémiové ozvučení Canton Dolby ProLogic II, dvojitá skla, el.kufr, automatické natáčecí Full LED Matrixové světlomety vč. automatických dálkových světel, vyhřívaná zadní sedadla, sportovní vyhřívaná, velká satelitní navigace, ambientní osvětlení interiéru (možno volit z 10 druhů barev podsvícení), adaptivní podvozek + off road režim, adaptivní tempomat – sám reguluje rychlost dle značek, dvouzónová automatická klimatizace, asistent rozjezdu do kopce, front assist, lane assist + adaptivní vedení v pruhu+vibrace, hlídání mrtvého úhlu, čtení dopravních značek, rozpoznání přívěsu+únavy, asistent vyparkování, fce manévrovacího brzdění, handsfree, automatické parkování, parkovací asistent přední+zadní+kamera, Kessy – bezklíčové odemykání/zamykání + startování tlačítkem, elektricky nastavitelná + sklopná + vyhřívaná zrcátka, vyhřívané zadní okno, sun set, ski box, USB, AUX, Smart Link – Apple + Android Carplay, bezdrátová nabíječka telefonů, hlasové ovládání, plnohodnotná rezerva.",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "K vozu přikládám veškerou palubní literaturu, servisní knihu-servis jen Škoda auto, 2x originální klíč.",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "Cena 649 000,- Kč vč. DPH!",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "Odpočet DPH možný!",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "Záruka!",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "Vše garantováno v kupní smlouvě!",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "Navštivte nás v naší kryté hale, kde jsou pro Vás připraveny naše zánovní prověřené vozy se zárukou, jasným původem, jasným počtem majitelů, garancí kilometrů, garancí originální servisní knihy, profesionálním a zároveň přátelským přístupem.",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "V případě jakéhokoliv dotazu nás neváhejte kontaktovat na telefonním čísle  +420 724 242 380",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "ŠKODA SUPERB III FL 2.0 TDI 110KW DSG SPORTLINE TAŽNÝ KAMERA. Škoda Superb 3 Facelift 2.0 Tdi 110 Kw DSG Sportline Tažný Virtual",
+    {
+      "entities": [
+        [
+          28,
+          33,
+          "POWER"
+        ],
+        [
+          90,
+          93,
+          "FUEL"
+        ]
+      ]
+    }
+  ],
+  [
+    "V krásné výbavě Sportline",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "Servisní knížka, pravidelný servis pouze ve ŠKODA autorizovaném servisu",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "Výpis z digitálního servisního plánu v tištěné podobě k autu",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "Pravidelné výměny oleje, poslední záznam při 149 000km - 11/2024",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "Velmi pěkný stav, odpovídá nižšímu nájezdu, rychlé dalníční km!",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "• Rok 2021",
+    {
+      "entities": [
+        [
+          2,
+          10,
+          "YEAR"
+        ]
+      ]
+    }
+  ],
+  [
+    "• Model 2022",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "• Nájezd: 166 000 km",
+    {
+      "entities": [
+        [
+          10,
+          20,
+          "MILEAGE"
+        ]
+      ]
+    }
+  ],
+  [
+    "• Barva: Steel Grey - “BETON”",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "• Převodovka: 7-mi stupňová automatická včetně manuálního F1 řazení",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "➡️Sportline",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "Příplatková výbava:",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "• Přední MATRIX světlomety + zadní led s dynamickým blinkrem",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "• Virtuální COCPIT - digitální budíky se změnou vzhledu",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "• Velká NAVIGACE - Colombus",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "• Parkovací KAMERA",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "• Vyhřívaný volant",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "• Originální el. sklopné TAŽNÉ ZAŘÍZENÍ",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "• Plně elektrické + paměťové přední sedadla",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "• Adaptivní tempomat",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "• Rozpoznávání únavy, značek + vozíku",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "• Roletky zadních oken",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "• 2zónová automatická klima",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "• Parkovací senzory zadní + přední",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "• Ambientní osvětlení s možností změny barvy",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "• CARPLAY, ANDROID AUTO",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "• Keyless - bezklíčový přístup (odemykání, zamykání, startování)",
+    {
+      "entities": []
+    }
+  ],
+  [
+    "• Vyhřívané přední + zadní sedadla",
+    {
+      "entities": []
+    }
+  ]
+]
