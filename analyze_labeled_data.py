@@ -33,7 +33,13 @@ def analyze_labeled_data(file_path: str):
 
     # Analyze each example
     for item in data:
-        entities = item.get('entities', [])
+        # Handle both tuple format (text, {"entities": [...]}) and dict format
+        if isinstance(item, (list, tuple)):
+            text, annotations = item
+            entities = annotations.get('entities', [])
+        else:
+            text = item.get('text', '')
+            entities = item.get('entities', [])
 
         if entities:
             examples_with_entities += 1
@@ -91,9 +97,15 @@ def analyze_labeled_data(file_path: str):
         print(f"📝 Sample Labeled Examples (first 3):\n")
         shown = 0
         for i, item in enumerate(data):
-            if item.get('entities') and shown < 3:
-                text = item['text']
-                entities = item['entities']
+            # Handle both tuple and dict format
+            if isinstance(item, (list, tuple)):
+                text, annotations = item
+                entities = annotations.get('entities', [])
+            else:
+                text = item.get('text', '')
+                entities = item.get('entities', [])
+
+            if entities and shown < 3:
                 shown += 1
 
                 print(f"{shown}. Text: {text[:60]}...")
