@@ -10,3 +10,23 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+venv
+lib64
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environment
+venv/
+env/
+
+# Training data (local only)
+training_*.json
+filtered_*.json
+*_texts.txt
+*.backup
+
+# Other
+get-pip.py
