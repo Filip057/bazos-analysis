@@ -147,7 +147,8 @@ def filter_training_data(input_file: str, output_file: str, min_fields: int = 1)
         print(f"\n   Text: {item['text'][:80]}...\n")
 
     print(f"\n🎯 Next step:")
-    print(f"   python3 label_data.py --input {text_file} --output training_data_labeled.json --limit 50")
+    print(f"   python3 label_data.py --input {output_file} --output training_data_labeled.json --limit 50")
+    print(f"   (Use the JSON file, not the _texts.txt file, to preserve full descriptions!)")
     print()
 
     return len(filtered)
