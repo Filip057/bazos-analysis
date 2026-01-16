@@ -18,13 +18,25 @@ from typing import List, Dict, Tuple, Optional
 from pathlib import Path
 
 
-# Regex patterns (same as scraper)
-MILEAGE_PATTERN_1 = re.compile(r'(\d{1,3}(?:\s?\d{3})*(?:\.\d+)?)\s?km', re.IGNORECASE)
-MILEAGE_PATTERN_2 = re.compile(r'(\d{1,3}(?:\s?\d{3})*)(?:\.|\s?tis\.?)\s?km', re.IGNORECASE)
-MILEAGE_PATTERN_3 = re.compile(r'(\d{1,3}(?:\s?\d{3})*)(?:\s?xxx\s?km)', re.IGNORECASE)
-POWER_PATTERN = re.compile(r'(\d{1,3})\s?kw', re.IGNORECASE)
-YEAR_PATTERN = re.compile(r'(?:rok výroby|R\.?V\.?|rok|r\.?v\.?|výroba)?\s*(\d{4})\b', re.IGNORECASE)
-FUEL_PATTERN = re.compile(r'\b(benzin|benzín|nafta|diesel|dýzl|naftak|tdi|tsi)\b', re.IGNORECASE)
+# Regex patterns - capture WITH units for labeling
+# Mileage patterns (returns value + unit like "200 000 km", "200t km", "85 tis km")
+MILEAGE_PATTERN_1 = re.compile(r'\d{1,3}(?:\s?\d{3})*(?:[.,]\d+)?\s?km', re.IGNORECASE)  # "200 000 km", "200km"
+MILEAGE_PATTERN_2 = re.compile(r'\d{1,3}(?:\s?\d{3})*(?:\s?tis\.?)\s?km', re.IGNORECASE)  # "200 tis km", "85 tis. km"
+MILEAGE_PATTERN_3 = re.compile(r'\d{1,3}(?:\s?\d{3})*\s?xxx\s?km', re.IGNORECASE)  # "200 xxx km", "200xxx"
+MILEAGE_PATTERN_4 = re.compile(r'\d{1,3}(?:[.,]\d+)?\s?t\.?\s?km', re.IGNORECASE)  # "200t km", "1.5t km"
+MILEAGE_PATTERN_5 = re.compile(r'\d{1,3}(?:[.,]\d+)?\s?t(?!d|s|i|e|a)', re.IGNORECASE)  # "200t", "1.5t" (not TDI, TSI, etc)
+MILEAGE_PATTERN_6 = re.compile(r'\d{1,3}(?:\s?\d{3})*\s?tisíc\s?km', re.IGNORECASE)  # "200 tisíc km"
+
+# Power patterns (returns value + unit like "110 kW", "150kW")
+POWER_PATTERN_1 = re.compile(r'\d{1,3}\s?kw', re.IGNORECASE)  # "110 kW", "110kW"
+POWER_PATTERN_2 = re.compile(r'\d{1,3}\s?ps', re.IGNORECASE)  # "150 PS", "150PS"
+POWER_PATTERN_3 = re.compile(r'\d{1,3}\s?koní', re.IGNORECASE)  # "110 koní"
+
+# Year pattern (returns just the 4-digit year like "2016")
+YEAR_PATTERN = re.compile(r'\b(19\d{2}|20[0-2]\d)\b')  # 1900-2029, just the number
+
+# Fuel patterns (returns just the fuel word like "diesel", "TDI", "benzín")
+FUEL_PATTERN = re.compile(r'\b(benzin|benzín|nafta|diesel|dýzl|naftak|turbodiesel|tdi|tsi|hybrid|elektro|electric|lpg|cng|plyn)\b', re.IGNORECASE)
 
 
 class AssistedLabeler:
@@ -65,7 +77,50 @@ class AssistedLabeler:
         """Find all mileage mentions"""
         results = []
 
-        for pattern in [MILEAGE_PATTERN_1, MILEAGE_PATTERN_2, MILEAGE_PATTERN_3]:
+        # Try all mileage patterns
+        patterns = [MILEAGE_PATTERN_1, MILEAGE_PATTERN_2, MILEAGE_PATTERN_3,
+                   MILEAGE_PATTERN_4, MILEAGE_PATTERN_5, MILEAGE_PATTERN_6]
+
+        for pattern in patterns:
+            for match in pattern.finditer(text):
+                full_match = match.group(0)
+                start = match.start()
+                end = match.end()
+                results.append((full_match, start, end))
+
+        # Deduplicate overlapping matches (keep longest match at same position)
+        seen_positions = {}
+        for match_text, start, end in results:
+            if start not in seen_positions or len(match_text) > len(seen_positions[start][0]):
+                seen_positions[start] = (match_text, start, end)
+
+        results = sorted(seen_positions.values(), key=lambda x: x[1])
+        return results
+
+    def auto_find_year(self, text: str) -> List[Tuple[str, int, int]]:
+        """Find all year mentions (returns just the 4-digit year)"""
+        results = []
+
+        for match in YEAR_PATTERN.finditer(text):
+            year_str = match.group(0)  # Just the year like "2016"
+            year = int(year_str)
+
+            # Only valid car years
+            if 1990 <= year <= 2030:
+                start = match.start()
+                end = match.end()
+                results.append((year_str, start, end))
+
+        return list(set(results))
+
+    def auto_find_power(self, text: str) -> List[Tuple[str, int, int]]:
+        """Find all power mentions (returns value + unit like '110 kW')"""
+        results = []
+
+        # Try all power patterns
+        patterns = [POWER_PATTERN_1, POWER_PATTERN_2, POWER_PATTERN_3]
+
+        for pattern in patterns:
             for match in pattern.finditer(text):
                 full_match = match.group(0)
                 start = match.start()
@@ -73,36 +128,13 @@ class AssistedLabeler:
                 results.append((full_match, start, end))
 
         # Deduplicate overlapping matches
-        results = sorted(set(results), key=lambda x: x[1])
+        seen_positions = {}
+        for match_text, start, end in results:
+            if start not in seen_positions or len(match_text) > len(seen_positions[start][0]):
+                seen_positions[start] = (match_text, start, end)
+
+        results = sorted(seen_positions.values(), key=lambda x: x[1])
         return results
-
-    def auto_find_year(self, text: str) -> List[Tuple[str, int, int]]:
-        """Find all year mentions"""
-        results = []
-
-        for match in YEAR_PATTERN.finditer(text):
-            year = match.group(1)
-            # Only valid years
-            if 1990 <= int(year) <= 2030:
-                # Get the full match context
-                full_match = match.group(0)
-                start = match.start()
-                end = match.end()
-                results.append((full_match, start, end))
-
-        return list(set(results))
-
-    def auto_find_power(self, text: str) -> List[Tuple[str, int, int]]:
-        """Find all power mentions"""
-        results = []
-
-        for match in POWER_PATTERN.finditer(text):
-            full_match = match.group(0)
-            start = match.start()
-            end = match.end()
-            results.append((full_match, start, end))
-
-        return list(set(results))
 
     def auto_find_fuel(self, text: str) -> List[Tuple[str, int, int]]:
         """Find all fuel mentions"""
