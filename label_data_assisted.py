@@ -157,7 +157,7 @@ class AssistedLabeler:
         if not auto_finds:
             # No suggestion
             print(f"  No suggestion found")
-            user_input = input(f"  Type the {entity_name.lower()} text (or press Enter to skip): ").strip()
+            user_input = input(f"  Type the {entity_name.lower()} text, or press ENTER to skip: ").strip()
 
             if not user_input:
                 self.stats['skipped'] += 1
@@ -179,7 +179,7 @@ class AssistedLabeler:
             print(f"  Found: '{suggestion}'")
             print(f"  Context: ...{highlighted[max(0,start-30):min(len(text),end+30)]}...")
 
-            user_input = input(f"  Press ENTER to accept, or type correction: ").strip()
+            user_input = input(f"  Press ENTER to accept, type 's' to skip, or type correct text: ").strip()
 
             if not user_input:
                 # Accept suggestion
@@ -208,9 +208,9 @@ class AssistedLabeler:
                 context = text[context_start:end] + "..." if end < len(text) else text[context_start:end]
                 print(f"    {i}. '{suggestion}' (...{context})")
 
-            user_input = input(f"  Pick number (1-{len(auto_finds)}), type manually, or press Enter to skip: ").strip()
+            user_input = input(f"  Pick number (1-{len(auto_finds)}), type 's' to skip, or type correct text: ").strip()
 
-            if not user_input:
+            if not user_input or user_input.lower() == 's' or user_input.lower() == 'skip':
                 self.stats['skipped'] += 1
                 return None
             elif user_input.isdigit() and 1 <= int(user_input) <= len(auto_finds):
@@ -233,8 +233,8 @@ class AssistedLabeler:
         """Label one text with assistance"""
 
         print(f"\n{'='*80}")
-        print(f"📝 Text (first 200 chars):")
-        print(f"{text[:200]}{'...' if len(text) > 200 else ''}")
+        print(f"📝 Text (first 500 chars):")
+        print(f"{text[:500]}{'...' if len(text) > 500 else ''}")
         print(f"{'='*80}")
 
         entities = []
