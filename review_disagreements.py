@@ -1,0 +1,273 @@
+"""
+Review Disagreements Interface
+===============================
+
+Manual review tool for cases where ML and Regex disagree.
+This is where humans improve the training data by correcting mistakes.
+
+Usage:
+    python3 review_disagreements.py
+
+Interactive prompts will guide you through each disagreement.
+"""
+
+import json
+from pathlib import Path
+from typing import List, Dict
+from datetime import datetime
+
+
+class DisagreementReviewer:
+    """Interactive tool for reviewing extraction disagreements"""
+
+    def __init__(self,
+                 review_queue_file: str = 'review_queue.json',
+                 reviewed_data_file: str = 'manual_review_data.json'):
+        self.review_queue_file = Path(review_queue_file)
+        self.reviewed_data_file = Path(reviewed_data_file)
+
+    def review_all(self):
+        """Review all items in the queue"""
+        if not self.review_queue_file.exists():
+            print("✅ No disagreements to review!")
+            return
+
+        with open(self.review_queue_file, 'r', encoding='utf-8') as f:
+            queue = json.load(f)
+
+        if not queue:
+            print("✅ Review queue is empty!")
+            return
+
+        print(f"\n{'='*80}")
+        print(f"🔍 Disagreement Review")
+        print(f"{'='*80}")
+        print(f"You have {len(queue)} cases to review")
+        print(f"\nInstructions:")
+        print(f"  - For each field, choose which extraction is correct")
+        print(f"  - Type '1' for ML, '2' for Regex, '3' for Neither, or type the correct value")
+        print(f"  - Type 'skip' to skip this example")
+        print(f"  - Type 'quit' to save and exit")
+        print(f"{'='*80}\n")
+
+        input("Press Enter to start review...")
+
+        reviewed_data = []
+        skipped = []
+
+        for i, case in enumerate(queue, 1):
+            print(f"\n{'='*80}")
+            print(f"Case {i}/{len(queue)} - Car ID: {case.get('car_id', 'Unknown')}")
+            print(f"{'='*80}")
+            print(f"Text: {case['text']}")
+            print(f"\nDisagreements: {', '.join(case['comparison']['disagreements'])}")
+            print()
+
+            # Review each field
+            corrected_result = {}
+
+            for field in ['mileage', 'year', 'power', 'fuel']:
+                ml_value = case['ml_result'].get(field)
+                regex_value = case['regex_result'].get(field)
+
+                if field in case['comparison']['disagreements']:
+                    # They disagree - ask user
+                    print(f"\n{'─'*40}")
+                    print(f"⚠️  {field.upper()} - DISAGREEMENT:")
+                    print(f"  1. ML found:    {ml_value}")
+                    print(f"  2. Regex found: {regex_value}")
+
+                    while True:
+                        choice = input(f"  Which is correct? (1/2/3=Neither/custom value): ").strip().lower()
+
+                        if choice == 'skip':
+                            print("  ⏭️  Skipping this example")
+                            skipped.append(case)
+                            break
+                        elif choice == 'quit':
+                            print("\n💾 Saving progress and exiting...")
+                            self._save_reviewed_data(reviewed_data, skipped, queue[i:])
+                            return
+                        elif choice == '1':
+                            corrected_result[field] = ml_value
+                            print(f"  ✓ Using ML: {ml_value}")
+                            break
+                        elif choice == '2':
+                            corrected_result[field] = regex_value
+                            print(f"  ✓ Using Regex: {regex_value}")
+                            break
+                        elif choice == '3':
+                            corrected_result[field] = None
+                            print(f"  ✓ Neither - field is empty")
+                            break
+                        else:
+                            # Custom value
+                            try:
+                                if field in ['mileage', 'year', 'power']:
+                                    corrected_result[field] = int(choice)
+                                else:
+                                    corrected_result[field] = choice
+                                print(f"  ✓ Using custom value: {choice}")
+                                break
+                            except ValueError:
+                                print(f"  ❌ Invalid input. Try again.")
+
+                    if choice == 'skip':
+                        break
+
+                elif field in case['comparison']['ml_only']:
+                    # Only ML found
+                    print(f"\n{'─'*40}")
+                    print(f"ℹ️  {field.upper()} - ML only:")
+                    print(f"  ML found: {ml_value}")
+                    print(f"  Regex found: Nothing")
+
+                    choice = input(f"  Is ML correct? (y/n/custom value): ").strip().lower()
+
+                    if choice == 'y' or choice == '':
+                        corrected_result[field] = ml_value
+                        print(f"  ✓ Confirmed: {ml_value}")
+                    elif choice == 'n':
+                        corrected_result[field] = None
+                        print(f"  ✓ Rejected - field is empty")
+                    else:
+                        try:
+                            if field in ['mileage', 'year', 'power']:
+                                corrected_result[field] = int(choice)
+                            else:
+                                corrected_result[field] = choice
+                            print(f"  ✓ Using custom value: {choice}")
+                        except ValueError:
+                            corrected_result[field] = ml_value
+                            print(f"  ⚠️  Invalid input, keeping ML value")
+
+                elif field in case['comparison']['regex_only']:
+                    # Only Regex found
+                    print(f"\n{'─'*40}")
+                    print(f"ℹ️  {field.upper()} - Regex only:")
+                    print(f"  ML found: Nothing")
+                    print(f"  Regex found: {regex_value}")
+
+                    choice = input(f"  Is Regex correct? (y/n/custom value): ").strip().lower()
+
+                    if choice == 'y' or choice == '':
+                        corrected_result[field] = regex_value
+                        print(f"  ✓ Confirmed: {regex_value}")
+                    elif choice == 'n':
+                        corrected_result[field] = None
+                        print(f"  ✓ Rejected - field is empty")
+                    else:
+                        try:
+                            if field in ['mileage', 'year', 'power']:
+                                corrected_result[field] = int(choice)
+                            else:
+                                corrected_result[field] = choice
+                            print(f"  ✓ Using custom value: {choice}")
+                        except ValueError:
+                            corrected_result[field] = regex_value
+                            print(f"  ⚠️  Invalid input, keeping Regex value")
+
+                else:
+                    # Both agree or both empty
+                    corrected_result[field] = ml_value  # Use ML value (they're the same)
+
+            # Convert to training format
+            # Note: This is simplified - in production you'd want exact entity positions
+            training_example = (case['text'], {'entities': self._create_entities(case['text'], corrected_result)})
+
+            reviewed_data.append({
+                'data': training_example,
+                'car_id': case.get('car_id'),
+                'timestamp': datetime.now().isoformat(),
+                'source': 'manual_review'
+            })
+
+            print(f"\n✅ Case {i} reviewed and saved")
+
+        # Save all reviewed data
+        self._save_reviewed_data(reviewed_data, skipped, [])
+
+        print(f"\n{'='*80}")
+        print(f"✅ Review Complete!")
+        print(f"{'='*80}")
+        print(f"Reviewed: {len(reviewed_data)} cases")
+        print(f"Skipped:  {len(skipped)} cases")
+        print(f"\n💡 Next step: python3 retrain_model.py")
+        print(f"{'='*80}\n")
+
+    def _create_entities(self, text: str, result: Dict) -> List:
+        """Create entity annotations from result (simplified)"""
+        entities = []
+        import re
+
+        # Find mileage
+        if result['mileage']:
+            patterns = [
+                rf"{result['mileage']}\s?km",
+                rf"{result['mileage']//1000}\s?(?:tis|t)\s?km"
+            ]
+            for pattern in patterns:
+                match = re.search(pattern, text, re.IGNORECASE)
+                if match:
+                    entities.append((match.start(), match.end(), 'MILEAGE'))
+                    break
+
+        # Find year
+        if result['year']:
+            year_str = str(result['year'])
+            pos = text.find(year_str)
+            if pos != -1:
+                entities.append((pos, pos + 4, 'YEAR'))
+
+        # Find power
+        if result['power']:
+            pattern = rf"{result['power']}\s?(?:kw|ps|koní)"
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                entities.append((match.start(), match.end(), 'POWER'))
+
+        # Find fuel
+        if result['fuel']:
+            pos = text.lower().find(result['fuel'].lower())
+            if pos != -1:
+                entities.append((pos, pos + len(result['fuel']), 'FUEL'))
+
+        return entities
+
+    def _save_reviewed_data(self, reviewed: List, skipped: List, remaining: List):
+        """Save reviewed data and update queue"""
+        # Save reviewed data
+        if reviewed:
+            existing = []
+            if self.reviewed_data_file.exists():
+                with open(self.reviewed_data_file, 'r', encoding='utf-8') as f:
+                    existing = json.load(f)
+
+            existing.extend(reviewed)
+
+            with open(self.reviewed_data_file, 'w', encoding='utf-8') as f:
+                json.dump(existing, f, ensure_ascii=False, indent=2)
+
+            print(f"\n💾 Saved {len(reviewed)} reviewed cases to {self.reviewed_data_file}")
+
+        # Update review queue (keep skipped and remaining)
+        new_queue = skipped + remaining
+
+        if new_queue:
+            with open(self.review_queue_file, 'w', encoding='utf-8') as f:
+                json.dump(new_queue, f, ensure_ascii=False, indent=2)
+            print(f"💾 Updated review queue: {len(new_queue)} items remaining")
+        else:
+            # Clear the queue
+            if self.review_queue_file.exists():
+                self.review_queue_file.unlink()
+            print(f"🗑️  Review queue cleared")
+
+
+def main():
+    reviewer = DisagreementReviewer()
+    reviewer.review_all()
+
+
+if __name__ == "__main__":
+    main()
