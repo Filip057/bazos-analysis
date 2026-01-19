@@ -98,5 +98,10 @@ engine = create_engine(DATABASE_URI)
 # Don't connect immediately - only when actually needed
 # connection = engine.connect()  # Removed - connects lazily now
 
-# Create the tables in the database (only if connected)
-Base.metadata.create_all(engine)
+def init_database():
+    """Initialize database tables - call this when you actually need the database"""
+    Base.metadata.create_all(engine)
+
+# REMOVED: Base.metadata.create_all(engine)
+# This was connecting to MySQL at import time, blocking usage without MySQL
+# Now you must explicitly call init_database() when you need it

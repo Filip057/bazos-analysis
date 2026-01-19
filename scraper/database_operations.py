@@ -9,12 +9,12 @@ from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from database.model import Model, Brand, Offer, engine
+from database.model import Model, Brand, Offer, engine, init_database
 import aiomysql
 
 
 import os
-from config import get_config
+from webapp.config import get_config
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -109,6 +109,14 @@ async def fetch_data_into_database(data: List[Dict], batch_size: int = 100):
     if not data:
         logger.warning("No data to save")
         return
+
+    # Initialize database tables if not already done
+    try:
+        init_database()
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {e}")
+        logger.error("Make sure MySQL is running and credentials are correct")
+        raise
 
     # Pre-load all model IDs in a single synchronous block to avoid blocking in async loop
     session = Session()
