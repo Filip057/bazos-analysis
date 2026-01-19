@@ -19,7 +19,7 @@ from pathlib import Path
 from datetime import datetime
 import logging
 
-from ml_extractor import CarDataExtractor
+from ml.ml_extractor import CarDataExtractor
 
 logging.basicConfig(
     level=logging.INFO,

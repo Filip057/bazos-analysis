@@ -25,7 +25,7 @@ from pathlib import Path
 import json
 
 # Import your existing scraper functions
-from data_scrap import (
+from scraper.data_scrap import (
     fetch_data,
     get_all_pages_for_brands,
     get_urls_for_details,

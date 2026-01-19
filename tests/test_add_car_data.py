@@ -2,15 +2,13 @@ import pytest
 import os
 import sys
 
-from database_operations import save_to_csv, fetch_data_into_database
+from scraper.database_operations import save_to_csv, fetch_data_into_database
 
 
 from sqlalchemy.orm import sessionmaker
 
 from sqlalchemy import create_engine
-from app import Car
-
-from database.model import Base
+from database.model import Car, Base
 
 sys.path.append('/Users/filiphome/bazos analysis')
 

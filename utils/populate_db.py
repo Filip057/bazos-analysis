@@ -1,7 +1,7 @@
 import os
 from sqlalchemy.orm import sessionmaker
 from database.model import Brand, Model, engine  # Import your SQLAlchemy models
-from car_models import CAR_MODELS  # Import the brand-model dictionary
+from scraper.car_models import CAR_MODELS  # Import the brand-model dictionary
 
 # Create a session
 Session = sessionmaker(bind=engine)

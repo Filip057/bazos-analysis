@@ -11,12 +11,16 @@ import time
 from typing import List, Tuple, Optional, Dict
 
 # dictionary for car brands and its models
-import car_models
+from scraper.car_models import CAR_MODELS
+import scraper.car_models as car_models
 
-from database_operations import check_if_car, fetch_data_into_database
+from scraper.database_operations import check_if_car, fetch_data_into_database
 
 # Progress tracking
 from tqdm.asyncio import tqdm as async_tqdm
+
+# ML + Regex extraction system
+from ml.production_extractor import ProductionExtractor
 
 # Configure logging
 logging.basicConfig(
@@ -48,12 +52,7 @@ CAR_BRANDS = ['alfa', 'audi', 'bmw', 'citroen', 'dacia', 'fiat',
               'nissan', 'opel', 'peugeot', 'renault', 'seat', 'suzuki', 'skoda', 'toyota', 'volkswagen',
               'volvo']
 
-# Pre-compiled regex patterns for performance
-MILEAGE_PATTERN_1 = re.compile(r'(\d{1,3}(?:\s?\d{3})*(?:\.\d+)?)\s?km', re.IGNORECASE)
-MILEAGE_PATTERN_2 = re.compile(r'(\d{1,3}(?:\s?\d{3})*)(?:\.|\s?tis\.?)\s?km', re.IGNORECASE)
-MILEAGE_PATTERN_3 = re.compile(r'(\d{1,3}(?:\s?\d{3})*)(?:\s?xxx\s?km)', re.IGNORECASE)
-POWER_PATTERN = re.compile(r'(\d{1,3})\s?kw', re.IGNORECASE)
-YEAR_PATTERN = re.compile(r'(?:rok výroby|R\.?V\.?|rok|r\.?v\.?|výroba)?\s*(\d{4})\b', re.IGNORECASE)
+# Extraction is now handled by ProductionExtractor (ML + context-aware regex)
 
 # Connection pooling and rate limiting
 MAX_CONCURRENT_REQUESTS = 20  # Limit concurrent requests to avoid overwhelming server
@@ -77,51 +76,14 @@ def get_frequency_analysis(string_list: list):
     return word_counts
 
 
-# ANALYSING STRINGS FNCS
-# Getting data from string with regex (using pre-compiled patterns)
-def get_mileage(long_string: str) -> Optional[int]:
-    text = re.sub(r'[^\w\s]', '', long_string.lower())
-
-    # Try pattern 1 first
-    matches1 = MILEAGE_PATTERN_1.findall(text)
-    if matches1:
-        try:
-            return int(matches1[0].replace(' ', ''))
-        except ValueError:
-            pass
-
-    # Try pattern 2
-    matches2 = MILEAGE_PATTERN_2.findall(text)
-    if matches2:
-        try:
-            return int(matches2[0].replace(' ', '')) * 1000  # Convert 'tis' to thousands
-        except ValueError:
-            pass
-
-    # Try pattern 3
-    matches3 = MILEAGE_PATTERN_3.findall(text)
-    if matches3:
-        try:
-            return int(matches3[0].replace(' ', '')) * 1000
-        except ValueError:
-            pass
-
-    return None
-
-def get_power(long_string: str) -> Optional[int]:
-    text = re.sub(r'[^\w\s]', '', long_string.lower())
-    match = POWER_PATTERN.search(text)
-    if match:
-        return int(re.sub(r'\D', '', match.group(1)))
-    return None
-
-def get_year_manufacture(long_string: str) -> Optional[int]:
-    match = YEAR_PATTERN.search(long_string)
-    if match:
-        return int(match.group(1))
-    return None
+# OLD EXTRACTION FUNCTIONS REMOVED - Now using ProductionExtractor (ML + context-aware regex)
+# The new system combines:
+#   - ML model (spaCy NER trained on 201+ examples)
+#   - Context-aware regex (avoids false positives like STK dates)
+#   - Continuous learning (auto-collects training data from production)
 
 def get_model(brand, header: str) -> str:
+    """Extract car model from header text (still uses regex as models vary by brand)"""
     models = CAR_MODELS.get(brand)
     if models is not None:
         pattern = re.compile(r'\b(?:' + '|'.join(models) + r')\b', re.IGNORECASE)
@@ -278,29 +240,41 @@ async def get_descriptions_headings_price(brand_urls: List[Tuple[str, str]], ses
     return final_list
 
 # processing the string and retrieving the data
-async def process_data(brand: str, url: str, description: str, heading: str, price: int) -> Dict:
-    """Extract structured data from car listing"""
+async def process_data(brand: str, url: str, description: str, heading: str, price: int, extractor: ProductionExtractor) -> Dict:
+    """Extract structured data from car listing using ML + context-aware regex"""
+
+    # Use production extractor (ML + regex) on combined text
+    combined_text = f"{heading}\n{description}"
+    extraction_result = extractor.extract(combined_text, car_id=url)
+
+    # Extract model separately (brand-specific patterns)
     model = get_model(brand=brand, header=heading)
-    mileage = get_mileage(long_string=description) or get_mileage(long_string=heading)
-    year_manufacture = get_year_manufacture(long_string=description) or get_year_manufacture(long_string=heading)
-    power = get_power(long_string=description) or get_power(long_string=heading)
 
     car_data = {
         "brand": brand,
         "model": model,
-        "year_manufacture": year_manufacture,
-        "mileage": mileage,
-        "power": power,
+        "year_manufacture": extraction_result.get('year'),
+        "mileage": extraction_result.get('mileage'),
+        "power": extraction_result.get('power'),
+        "fuel": extraction_result.get('fuel'),  # NEW: fuel type from ML
         "price": price,
         "heading": heading,
-        "url": url
+        "url": url,
+        # Additional metadata from extraction
+        "extraction_confidence": extraction_result.get('confidence'),  # high/medium/low
+        "needs_review": extraction_result.get('flagged_for_review', False)
     }
     return car_data
 
 
 # all together
 async def main():
-    """Main scraping orchestrator with connection pooling and rate limiting"""
+    """Main scraping orchestrator with ML extraction and connection pooling"""
+    # Initialize production extractor (ML + context-aware regex)
+    logger.info("Initializing ML + Regex extraction system...")
+    extractor = ProductionExtractor()
+    logger.info("✓ Production extractor ready")
+
     # Create semaphore for rate limiting
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
@@ -335,13 +309,18 @@ async def main():
         descriptions_headings_price_list = await get_descriptions_headings_price(urls_detail_list, session, semaphore)
         logger.info(f"Successfully scraped {len(descriptions_headings_price_list)} cars")
 
-        # Step 5: Process data to extract structured information
-        logger.info("Processing data...")
-        tasks = [process_data(brand, url, description, heading, price)
+        # Step 5: Process data to extract structured information with ML
+        logger.info("Extracting car data (ML + context-aware regex)...")
+        tasks = [process_data(brand, url, description, heading, price, extractor)
                  for brand, url, description, heading, price in descriptions_headings_price_list]
         processed_data = await asyncio.gather(*tasks)
 
-        # Step 6: Save data into database
+        # Step 6: Save extraction queues (training data and disagreements)
+        logger.info("Saving ML extraction queues...")
+        extractor.save_queues()
+        extractor.print_stats()
+
+        # Step 7: Save data into database
         logger.info("Saving to database...")
         await fetch_data_into_database(data=processed_data)
         logger.info(f"✓ Successfully saved {len(processed_data)} cars to database")

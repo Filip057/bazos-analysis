@@ -16,8 +16,8 @@ import logging
 from typing import Optional, Dict
 from pathlib import Path
 
-from ml_extractor import CarDataExtractor
-import data_scrap
+from ml.ml_extractor import CarDataExtractor
+from scraper import data_scrap
 
 logger = logging.getLogger(__name__)
 
