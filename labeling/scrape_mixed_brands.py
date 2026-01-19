@@ -15,7 +15,7 @@ import argparse
 from pathlib import Path
 
 # Import the standalone scraper
-from scrape_for_training_standalone import TrainingDataScraper, logger
+from labeling.scrape_for_training_standalone import TrainingDataScraper, logger
 
 
 async def scrape_mixed_brands(brand_counts: list, output_file: str):

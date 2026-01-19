@@ -17,7 +17,7 @@ from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy.exc import NoResultFound, SQLAlchemyError
 
 from database.model import Base, Car
-from config import get_config
+from webapp.config import get_config
 
 # Configure logging
 logging.basicConfig(

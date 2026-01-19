@@ -14,7 +14,7 @@ import logging
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from database.model import Car
-from config import get_config
+from webapp.config import get_config
 import random
 
 logging.basicConfig(level=logging.INFO)

@@ -1,9 +1,9 @@
 import re
 from bs4 import BeautifulSoup
 import requests
-from car_models import CAR_MODELS
+from scraper.car_models import CAR_MODELS
 
-from data_scrap import preprocess_text
+from scraper.data_scrap import preprocess_text
 
 
 def scrap_this_url(url):

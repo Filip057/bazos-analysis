@@ -26,8 +26,8 @@ from pathlib import Path
 from datetime import datetime
 from collections import Counter
 
-from ml_extractor import CarDataExtractor
-from context_aware_patterns import ContextAwarePatterns
+from ml.ml_extractor import CarDataExtractor
+from ml.context_aware_patterns import ContextAwarePatterns
 
 
 logging.basicConfig(

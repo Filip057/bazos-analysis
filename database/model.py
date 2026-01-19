@@ -1,7 +1,7 @@
 from sqlalchemy.orm import DeclarativeBase, relationship
 from sqlalchemy import Column, Integer, String, BigInteger, ForeignKey, Float, Index
 from sqlalchemy import create_engine
-from config import get_config
+from webapp.config import get_config
 
 # Load configuration
 config = get_config()

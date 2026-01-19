@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import List, Tuple, Dict
 import random
 
-from ml_extractor import CarDataExtractor
+from ml.ml_extractor import CarDataExtractor
 
 logging.basicConfig(
     level=logging.INFO,
