@@ -16,7 +16,7 @@ from sqlalchemy import create_engine, func
 from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy.exc import NoResultFound, SQLAlchemyError
 
-from database.model import Base, Car
+from database.model import Base, Car, init_database
 from webapp.config import get_config
 
 # Configure logging
@@ -377,6 +377,15 @@ def ratelimit_handler(e):
 @app.teardown_appcontext
 def shutdown_session(exception=None):
     DBSession.remove()
+
+
+# Initialize database tables
+try:
+    init_database()
+    logger.info("✓ Database initialized")
+except Exception as e:
+    logger.warning(f"Database initialization failed: {e}")
+    logger.warning("App will start but database operations may fail")
 
 
 if __name__ == '__main__':
