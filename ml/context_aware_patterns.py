@@ -227,22 +227,42 @@ class ContextAwarePatterns:
 
     def _parse_mileage(self, number_str: str, full_text: str) -> int:
         """Parse mileage value, handling abbreviations"""
-        # Remove spaces
-        number_str = number_str.replace(' ', '').replace('.', '')
+        # Remove spaces, dots, newlines, tabs (regex can capture multi-line)
+        number_str = number_str.replace(' ', '').replace('.', '').replace('\n', '').replace('\t', '').replace('\r', '')
+
+        # Extract only numbers (ignore any text mixed in)
+        numbers = re.findall(r'\d+', number_str)
+
+        if not numbers:
+            return 0
+
+        # For mileage, prefer larger numbers (likely km, not year)
+        # Example: "2003\n190000" → prefer 190000 (mileage) over 2003 (year)
+        valid_mileages = []
+        for num_str in numbers:
+            num = int(num_str)
+            # Reasonable mileage range: 1,000 - 999,999 km
+            if 1000 <= num <= 999999:
+                valid_mileages.append(num)
+            # Could be thousands notation: 10-999 (will be multiplied by 1000)
+            elif 10 <= num <= 999:
+                valid_mileages.append(num)
+
+        # Use first valid mileage, or fallback to first number
+        base_value = valid_mileages[0] if valid_mileages else int(numbers[0])
 
         # Check for thousands abbreviations (only immediately after the number)
         # Examples: "150tis km", "150t km", "150 t km"
-        # NOT: "najeto 150000 km" (don't match the 't' in 'najeto')
         full_text_lower = full_text.lower()
 
         # Look for 'tis' or 't' immediately after digits
         if re.search(r'\d+\s*tis\.?\s*km', full_text_lower):
-            return int(number_str) * 1000
+            return base_value * 1000
         elif re.search(r'\d+\s*t\.?\s*km', full_text_lower) and not re.search(r'\d+\s*td[is]', full_text_lower):
             # "150t km" but NOT "150 TDI" (car engine type)
-            return int(number_str) * 1000
+            return base_value * 1000
 
-        return int(number_str)
+        return base_value
 
     def _deduplicate_matches(self, matches: List[Match]) -> List[Match]:
         """Keep only best match at each position"""
