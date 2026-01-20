@@ -47,8 +47,29 @@ def check_if_car(model, heading, price):
         return False
     if price is None or price < 5000:
         return False
-    non_car_keywords = [ 'ALU','kola' ,'kol' , 'motor','sada','díly', 'sklo', 'převodovka', 'pneu', 'pneumatiky', 'disky', 'sedadla', 'baterie', 'náhradní', 'zrcátka', 'motocykl', 'motorky', 'moto', 'kolo', 'kola', 
-                        'skútr','motorové', 'karavany', 'choppery', 'endura', 'autobus', 'autodíly', 'zimní', 'letní',]
+    non_car_keywords = [
+        # Původní klíčová slova
+        'ALU', 'kola', 'kol', 'motor', 'sada', 'díly', 'sklo', 'převodovka',
+        'pneu', 'pneumatiky', 'disky', 'sedadla', 'baterie', 'náhradní', 'zrcátka',
+        'motocykl', 'motorky', 'moto', 'kolo', 'skútr', 'motorové', 'karavany',
+        'choppery', 'endura', 'autobus', 'autodíly', 'zimní', 'letní',
+
+        # Nová klíčová slova - specifické autodíly
+        'nárazník', 'naraznik', 'nárazníky', 'narazniky',
+        'blatník', 'blatnik', 'blatníky', 'blatniky',
+        'světla', 'svetla', 'světlo', 'svetlo', 'lampy', 'lampa',
+        'hlava motoru', 'hlava', 'válce', 'valce', 'píst', 'pist',
+        'kapota', 'dveře', 'dvere', 'dverí', 'kufr', 'víko',
+        'volant', 'airbag', 'řídící', 'ridici',
+        'výfuk', 'vyfuk', 'katalyzátor', 'katalyzator', 'dpf',
+        'čelní sklo', 'celni sklo', 'okno', 'skla',
+        'turbo', 'turbodmychadlo', 'kompresor',
+        'náprava', 'naprava', 'kolo', 'ložisko', 'lozisko',
+        'brzdy', 'kotouč', 'kotouc', 'destičky', 'desticky',
+        'tlumiče', 'tlumice', 'tlumič', 'tlumic', 'pružiny', 'pruziny',
+        'rám', 'ram', 'karoserie', 'podvozek',
+        'originál', 'original', 'bazar', 'rozbit'
+    ]
     
     non_car_pattern = re.compile(r'\b(?:' + '|'.join(map(re.escape, non_car_keywords)) + r')\b', re.IGNORECASE)
     

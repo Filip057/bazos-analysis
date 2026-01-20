@@ -196,16 +196,21 @@ class ProductionExtractor:
         """
         self.stats['total_extractions'] += 1
 
-        # 1. ML Extraction
-        ml_result = self.ml_extractor.extract(text)
+        # 1. ML Extraction (raw)
+        ml_result_raw = self.ml_extractor.extract(text)
 
-        # 2. Context-aware regex extraction
-        regex_result = self._extract_with_regex(text)
+        # 2. Context-aware regex extraction (raw)
+        regex_result_raw = self._extract_with_regex(text)
 
-        # 3. Compare results
+        # 3. NORMALIZE BOTH before comparison (fixes benzín vs benzin issue)
+        normalizer = DataNormalizer()
+        ml_result = self._normalize_result(ml_result_raw, normalizer)
+        regex_result = self._normalize_result(regex_result_raw, normalizer)
+
+        # 4. Compare NORMALIZED results (benzín == benzín now!)
         comparison = self._compare_results(ml_result, regex_result)
 
-        # 4. Make decision based on comparison
+        # 5. Make decision based on comparison
         final_result, confidence = self._decide_final_result(
             ml_result,
             regex_result,
@@ -231,24 +236,15 @@ class ProductionExtractor:
         # 6. Update field statistics
         self._update_field_stats(comparison)
 
-        # 7. Normalize extracted data for database consistency
-        normalizer = DataNormalizer()
-        normalized_result = {
-            'mileage': normalizer.normalize_mileage(final_result.get('mileage')),
-            'year': normalizer.normalize_year(final_result.get('year')),
-            'power': normalizer.normalize_power(final_result.get('power')),
-            'fuel': normalizer.normalize_fuel(final_result.get('fuel'))
-        }
-
-        # 8. Prepare response
+        # 7. Prepare response (already normalized in step 3)
         response = {
-            **normalized_result,
+            **final_result,  # Already normalized
             'confidence': confidence,
             'agreement': comparison['agreement_level'],
             'flagged_for_review': comparison['agreement_level'] == 'none',
             'car_id': car_id,
             # Include raw values for debugging
-            'raw_values': final_result if logger.isEnabledFor(logging.DEBUG) else None
+            'raw_values': ml_result_raw if logger.isEnabledFor(logging.DEBUG) else None
         }
 
         return response
@@ -301,6 +297,15 @@ class ProductionExtractor:
                 result['fuel'] = fuel
 
         return result
+
+    def _normalize_result(self, result: Dict, normalizer: DataNormalizer) -> Dict:
+        """Normalize extraction result for consistent comparison"""
+        return {
+            'mileage': normalizer.normalize_mileage(result.get('mileage')),
+            'year': normalizer.normalize_year(result.get('year')),
+            'power': normalizer.normalize_power(result.get('power')),
+            'fuel': normalizer.normalize_fuel(result.get('fuel'))
+        }
 
     def _compare_results(self, ml_result: Dict, regex_result: Dict) -> Dict:
         """Compare ML and regex results field by field"""
