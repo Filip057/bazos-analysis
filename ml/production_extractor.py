@@ -30,6 +30,105 @@ from ml.ml_extractor import CarDataExtractor
 from ml.context_aware_patterns import ContextAwarePatterns
 
 
+class DataNormalizer:
+    """Normalizes extracted data for database consistency"""
+
+    # Fuel type normalization
+    FUEL_DIESEL = {'diesel', 'nafta', 'tdi', 'td', 'motorová nafta', 'motorova nafta'}
+    FUEL_BENZIN = {'benzín', 'benzin', 'gas', 'gasoline', 'b'}
+    FUEL_LPG = {'lpg', 'plyn'}
+    FUEL_ELECTRIC = {'elektro', 'electric', 'ev', 'elektřina'}
+
+    @staticmethod
+    def normalize_fuel(fuel: Optional[str]) -> Optional[str]:
+        """Normalize fuel type to standard values"""
+        if not fuel:
+            return None
+
+        fuel_lower = fuel.lower().strip()
+
+        if fuel_lower in DataNormalizer.FUEL_DIESEL:
+            return 'diesel'
+        elif fuel_lower in DataNormalizer.FUEL_BENZIN:
+            return 'benzín'
+        elif fuel_lower in DataNormalizer.FUEL_LPG:
+            return 'lpg'
+        elif fuel_lower in DataNormalizer.FUEL_ELECTRIC:
+            return 'elektro'
+        else:
+            # Unknown fuel type - return as is
+            return fuel
+
+    @staticmethod
+    def normalize_mileage(mileage: any) -> Optional[int]:
+        """Normalize mileage to integer km"""
+        if not mileage:
+            return None
+
+        # Already a number
+        if isinstance(mileage, (int, float)):
+            return int(mileage)
+
+        # String - parse it
+        if isinstance(mileage, str):
+            import re
+
+            # Remove spaces and convert
+            mileage = mileage.replace(' ', '').replace('.', '')
+
+            # Extract just the number
+            match = re.search(r'(\d+)', mileage)
+            if match:
+                value = int(match.group(1))
+
+                # Check for thousands abbreviations
+                if re.search(r'\d+\s*(?:tis|t)\.?\s*km', mileage, re.IGNORECASE):
+                    value = value * 1000
+
+                return value
+
+        return None
+
+    @staticmethod
+    def normalize_power(power: any) -> Optional[int]:
+        """Normalize power to integer kW"""
+        if not power:
+            return None
+
+        # Already a number
+        if isinstance(power, (int, float)):
+            return int(power)
+
+        # String - parse it
+        if isinstance(power, str):
+            import re
+            # Extract just the number
+            match = re.search(r'(\d+)', power)
+            if match:
+                return int(match.group(1))
+
+        return None
+
+    @staticmethod
+    def normalize_year(year: any) -> Optional[int]:
+        """Normalize year to integer"""
+        if not year:
+            return None
+
+        # Already a number
+        if isinstance(year, (int, float)):
+            return int(year)
+
+        # String - parse it
+        if isinstance(year, str):
+            import re
+            match = re.search(r'(\d{4})', year)
+            if match:
+                return int(match.group(1))
+
+        return None
+
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -132,13 +231,24 @@ class ProductionExtractor:
         # 6. Update field statistics
         self._update_field_stats(comparison)
 
-        # 7. Prepare response
+        # 7. Normalize extracted data for database consistency
+        normalizer = DataNormalizer()
+        normalized_result = {
+            'mileage': normalizer.normalize_mileage(final_result.get('mileage')),
+            'year': normalizer.normalize_year(final_result.get('year')),
+            'power': normalizer.normalize_power(final_result.get('power')),
+            'fuel': normalizer.normalize_fuel(final_result.get('fuel'))
+        }
+
+        # 8. Prepare response
         response = {
-            **final_result,
+            **normalized_result,
             'confidence': confidence,
             'agreement': comparison['agreement_level'],
             'flagged_for_review': comparison['agreement_level'] == 'none',
-            'car_id': car_id
+            'car_id': car_id,
+            # Include raw values for debugging
+            'raw_values': final_result if logger.isEnabledFor(logging.DEBUG) else None
         }
 
         return response

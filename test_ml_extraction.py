@@ -100,13 +100,19 @@ def test_extraction():
         result = extractor.extract(example['text'], car_id=example['id'])
 
         # Show results
-        print("Extracted Data:")
+        print("Extracted & Normalized Data:")
         print(f"  Year:       {result.get('year')} (expected: {example['expected'].get('year')})")
         print(f"  Mileage:    {result.get('mileage')} (expected: {example['expected'].get('mileage')})")
         print(f"  Power:      {result.get('power')} (expected: {example['expected'].get('power')})")
         print(f"  Fuel:       {result.get('fuel')} (expected: {example['expected'].get('fuel')})")
         print(f"  Confidence: {result.get('confidence')}")
-        print(f"  Agreement:  {result.get('comparison', {}).get('agreement_level', 'N/A')}")
+        print(f"  Agreement:  {result.get('agreement', 'N/A')}")
+
+        # Show raw values if available (debug mode)
+        if result.get('raw_values'):
+            print(f"\n  Raw (before normalization):")
+            print(f"    Fuel: {result['raw_values'].get('fuel')} → {result.get('fuel')}")
+
         print()
 
         # Check correctness
