@@ -230,8 +230,16 @@ class ContextAwarePatterns:
         # Remove spaces
         number_str = number_str.replace(' ', '').replace('.', '')
 
-        # Check for thousands abbreviations
-        if 'tis' in full_text.lower() or 't' in full_text.lower():
+        # Check for thousands abbreviations (only immediately after the number)
+        # Examples: "150tis km", "150t km", "150 t km"
+        # NOT: "najeto 150000 km" (don't match the 't' in 'najeto')
+        full_text_lower = full_text.lower()
+
+        # Look for 'tis' or 't' immediately after digits
+        if re.search(r'\d+\s*tis\.?\s*km', full_text_lower):
+            return int(number_str) * 1000
+        elif re.search(r'\d+\s*t\.?\s*km', full_text_lower) and not re.search(r'\d+\s*td[is]', full_text_lower):
+            # "150t km" but NOT "150 TDI" (car engine type)
             return int(number_str) * 1000
 
         return int(number_str)
