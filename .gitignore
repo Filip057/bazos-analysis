@@ -10,25 +10,23 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+venv
+lib64
 
-# Logs
-*.log
-scraper.log
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
 
-# Generated ML/extraction data
-extraction_stats.json
-review_queue.json
-manual_review_data.json
-training_queue.json
+# Virtual environment
+venv/
+env/
 
-# Trained models (optional - comment out if you want to commit models)
-car_ner_model/
-model-*/
+# Training data (local only)
+training_*.json
+filtered_*.json
+*_texts.txt
+*.backup
 
-# Database
-*.db
-*.sqlite
-*.sqlite3
-
-# NLTK data
-nltk_data/
+# Other
+get-pip.py
