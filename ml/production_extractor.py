@@ -281,20 +281,29 @@ class ProductionExtractor:
             result['power'] = best_match.value
 
         # Fuel - normalize to base form
-        # TODO: Add fuel extraction to context_aware_patterns.py
-        # For now, use simple pattern
+        # FUEL patterns (FIXED: support adjectives like benzínový, dieselový, naftový)
         import re
-        fuel_pattern = re.compile(r'\b(benzin|benzín|nafta|diesel|dýzl|naftak|turbodiesel|tdi|tsi|hybrid|elektro|electric|lpg|cng|plyn)\b', re.IGNORECASE)
+        # Match both nouns and adjectives (benzín, benzínový, benzínového, etc.)
+        fuel_pattern = re.compile(
+            r'\b(benzin(?:ový|ového|ovým|ové|ovém)?|benzín(?:ový|ového|ovým|ové|ovém)?|'
+            r'nafta|naftový(?:ho|mu|m|ém)?|diesel(?:ový|ového|ovým|ové)?|'
+            r'dýzl|naftak|turbodiesel|tdi|tsi|hybrid|elektro|electric|lpg|cng|plyn)\b',
+            re.IGNORECASE
+        )
         fuel_match = fuel_pattern.search(text)
         if fuel_match:
             fuel = fuel_match.group(1).lower()
-            # Normalize
-            if fuel in ['diesel', 'nafta', 'tdi', 'turbodiesel', 'dýzl', 'naftak']:
+            # Normalize (strip adjective endings)
+            fuel_base = fuel.split('ový')[0].split('ového')[0].split('ovým')[0].split('ové')[0].split('ovém')[0]
+
+            # Diesel variants
+            if any(x in fuel_base for x in ['diesel', 'nafta', 'tdi', 'turbodiesel', 'dýzl', 'naftak', 'naftový']):
                 result['fuel'] = 'diesel'
-            elif fuel in ['benzin', 'benzín', 'tsi']:
-                result['fuel'] = 'benzin'
+            # Benzín variants
+            elif any(x in fuel_base for x in ['benzin', 'benzín', 'tsi']):
+                result['fuel'] = 'benzín'
             else:
-                result['fuel'] = fuel
+                result['fuel'] = fuel_base if fuel_base else fuel
 
         return result
 

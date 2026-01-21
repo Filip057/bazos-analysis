@@ -39,6 +39,27 @@ class DisagreementReviewer:
             print("✅ Review queue is empty!")
             return
 
+        # Load already reviewed car IDs to skip duplicates
+        reviewed_car_ids = set()
+        if self.reviewed_data_file.exists():
+            with open(self.reviewed_data_file, 'r', encoding='utf-8') as f:
+                existing_reviews = json.load(f)
+                reviewed_car_ids = {item.get('car_id') for item in existing_reviews if item.get('car_id')}
+
+        # Filter out already reviewed cases
+        original_queue_size = len(queue)
+        queue = [case for case in queue if case.get('car_id') not in reviewed_car_ids]
+
+        if len(queue) < original_queue_size:
+            print(f"\n✓ Skipped {original_queue_size - len(queue)} already reviewed cases")
+
+        if not queue:
+            print("✅ All cases have been reviewed!")
+            # Clear the queue file since everything is done
+            if self.review_queue_file.exists():
+                self.review_queue_file.unlink()
+            return
+
         print(f"\n{'='*80}")
         print(f"🔍 Disagreement Review")
         print(f"{'='*80}")
@@ -65,6 +86,7 @@ class DisagreementReviewer:
 
             # Review each field
             corrected_result = {}
+            skip_this_case = False
 
             for field in ['mileage', 'year', 'power', 'fuel']:
                 ml_value = case['ml_result'].get(field)
@@ -78,11 +100,12 @@ class DisagreementReviewer:
                     print(f"  2. Regex found: {regex_value}")
 
                     while True:
-                        choice = input(f"  Which is correct? (1/2/3=Neither/custom value): ").strip().lower()
+                        choice = input(f"  Which is correct? (1/2/3=Neither/custom value/skip): ").strip().lower()
 
                         if choice == 'skip':
                             print("  ⏭️  Skipping this example")
                             skipped.append(case)
+                            skip_this_case = True
                             break
                         elif choice == 'quit':
                             print("\n💾 Saving progress and exiting...")
@@ -112,7 +135,7 @@ class DisagreementReviewer:
                             except ValueError:
                                 print(f"  ❌ Invalid input. Try again.")
 
-                    if choice == 'skip':
+                    if skip_this_case:
                         break
 
                 elif field in case['comparison']['ml_only']:
@@ -171,6 +194,11 @@ class DisagreementReviewer:
                     # Both agree or both empty
                     corrected_result[field] = ml_value  # Use ML value (they're the same)
 
+            # Skip creating training example if user chose to skip
+            if skip_this_case:
+                print(f"\n⏭️  Case {i} skipped")
+                continue
+
             # Convert to training format
             # Note: This is simplified - in production you'd want exact entity positions
             training_example = (case['text'], {'entities': self._create_entities(case['text'], corrected_result)})
@@ -201,7 +229,7 @@ class DisagreementReviewer:
         import re
 
         # Find mileage
-        if result['mileage']:
+        if result.get('mileage'):
             patterns = [
                 rf"{result['mileage']}\s?km",
                 rf"{result['mileage']//1000}\s?(?:tis|t)\s?km"
@@ -213,21 +241,21 @@ class DisagreementReviewer:
                     break
 
         # Find year
-        if result['year']:
+        if result.get('year'):
             year_str = str(result['year'])
             pos = text.find(year_str)
             if pos != -1:
                 entities.append((pos, pos + 4, 'YEAR'))
 
         # Find power
-        if result['power']:
+        if result.get('power'):
             pattern = rf"{result['power']}\s?(?:kw|ps|koní)"
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
                 entities.append((match.start(), match.end(), 'POWER'))
 
         # Find fuel
-        if result['fuel']:
+        if result.get('fuel'):
             pos = text.lower().find(result['fuel'].lower())
             if pos != -1:
                 entities.append((pos, pos + len(result['fuel']), 'FUEL'))
