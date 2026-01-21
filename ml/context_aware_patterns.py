@@ -57,19 +57,19 @@ class ContextAwarePatterns:
         re.compile(r'\b(19\d{2}|20[0-2]\d)\b'),  # Any 4-digit year
     ]
 
-    # MILEAGE PATTERNS - Context-aware
+    # MILEAGE PATTERNS - Context-aware (FIXED: support dots as separators)
 
     MILEAGE_HIGH_CONFIDENCE = [
-        re.compile(r'(?:najeto|nájezd|km\s+celkem|počet\s+km)\s*[:.]?\s*(\d{1,3}(?:\s?\d{3})*)\s?km', re.IGNORECASE),
-        re.compile(r'(\d{1,3}(?:\s?\d{3})*)\s?km\s+(?:najeto|celkem)', re.IGNORECASE),
+        re.compile(r'(?:najeto|nájezd|km\s+celkem|počet\s+km)\s*[:.]?\s*(\d{1,3}(?:[\s.]?\d{3})*)\s?km', re.IGNORECASE),
+        re.compile(r'(\d{1,3}(?:[\s.]?\d{3})*)\s?km\s+(?:najeto|celkem)', re.IGNORECASE),
         re.compile(r'(?:najeto|nájezd)\s*[:.]?\s*(\d{1,3})\s?(?:tis|tisíc|t)\.?\s?km', re.IGNORECASE),  # "najeto 150 tis km"
     ]
 
     MILEAGE_MEDIUM_CONFIDENCE = [
-        re.compile(r'\b(\d{1,3}(?:\s?\d{3})*)\s?km\b', re.IGNORECASE),  # Standard "150000 km"
+        re.compile(r'\b(\d{1,3}(?:[\s.]?\d{3})*)\s?km\b', re.IGNORECASE),  # "150000 km", "150 000 km", "150.000 km"
         re.compile(r'\b(\d{1,3})\s?(?:tis|tisíc)\.?\s?km', re.IGNORECASE),  # "150 tis km"
         re.compile(r'\b(\d{1,3})\s?t(?!d|s|i|e)\s?km', re.IGNORECASE),  # "150t km" (not TDI)
-        re.compile(r'\b(\d{1,3}(?:\s?\d{3})*)\s?xxx\s?km', re.IGNORECASE),  # "150 xxx km"
+        re.compile(r'\b(\d{1,3}(?:[\s.]?\d{3})*)\s?xxx\s?km', re.IGNORECASE),  # "150 xxx km"
     ]
 
     # EXCLUDE mileage patterns (daily mileage, range, etc.)
@@ -78,7 +78,7 @@ class ContextAwarePatterns:
         re.compile(r'(\d+)\s?km\s+(?:denně|měsíčně|ročně)', re.IGNORECASE),  # "50 km denně"
     ]
 
-    # POWER PATTERNS
+    # POWER PATTERNS - ONLY kW (FIXED: exclude HP/PS/koně)
 
     POWER_HIGH_CONFIDENCE = [
         re.compile(r'(?:výkon|power|motor)\s*[:.]?\s*(\d{1,3})\s?kw', re.IGNORECASE),
@@ -86,9 +86,12 @@ class ContextAwarePatterns:
     ]
 
     POWER_MEDIUM_CONFIDENCE = [
-        re.compile(r'\b(\d{1,3})\s?kw\b', re.IGNORECASE),
-        re.compile(r'\b(\d{1,3})\s?ps\b', re.IGNORECASE),
-        re.compile(r'\b(\d{1,3})\s?koní\b', re.IGNORECASE),
+        re.compile(r'\b(\d{1,3})\s?kw\b', re.IGNORECASE),  # Only kW!
+    ]
+
+    # EXCLUDE power in HP/PS/koně (different unit, would need conversion)
+    POWER_EXCLUDE = [
+        re.compile(r'\b(\d{1,3})\s?(?:hp|ps|koní|koně|kon)\b', re.IGNORECASE),  # HP/PS/koně
     ]
 
     def find_years(self, text: str) -> List[Match]:
