@@ -28,5 +28,27 @@ filtered_*.json
 *_texts.txt
 *.backup
 
+# Logs
+*.log
+scraper.log
+
+# Generated ML/extraction data
+extraction_stats.json
+review_queue.json
+manual_review_data.json
+training_queue.json
+
+# Trained models (optional - comment out if you want to commit models)
+car_ner_model/
+model-*/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# NLTK data
+nltk_data/
+
 # Other
 get-pip.py
