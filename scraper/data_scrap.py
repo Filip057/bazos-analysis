@@ -268,8 +268,12 @@ async def process_data(brand: str, url: str, description: str, heading: str, pri
 
 
 # all together
-async def main():
-    """Main scraping orchestrator with ML extraction and connection pooling"""
+async def main(skip_db=False):
+    """Main scraping orchestrator with ML extraction and connection pooling
+
+    Args:
+        skip_db: If True, skip database saving (useful for testing without MySQL)
+    """
     # Initialize production extractor (ML + context-aware regex)
     logger.info("Initializing ML + Regex extraction system...")
     extractor = ProductionExtractor()
@@ -321,20 +325,33 @@ async def main():
         extractor.print_stats()
 
         # Step 7: Save data into database
-        logger.info("Saving to database...")
-        await fetch_data_into_database(data=processed_data)
-        logger.info(f"✓ Successfully saved {len(processed_data)} cars to database")
+        if skip_db:
+            logger.info("⏭️  Skipping database save (--skip-db flag used)")
+        else:
+            logger.info("Saving to database...")
+            await fetch_data_into_database(data=processed_data)
+            logger.info(f"✓ Successfully saved {len(processed_data)} cars to database")
 
-async def run():
-    await main()
+async def run(skip_db=False):
+    await main(skip_db=skip_db)
 
 
 if __name__ == "__main__":
+    import sys
+
+    # Check for --skip-db flag
+    skip_db = "--skip-db" in sys.argv
+
     start_time = time.time()
     logger.info("=" * 60)
     logger.info("BAZOS CAR SCRAPER - OPTIMIZED VERSION")
     logger.info("=" * 60)
-    asyncio.run(run())
+
+    if skip_db:
+        logger.info("🔧 Running in TEST MODE (database saving disabled)")
+        logger.info("=" * 60)
+
+    asyncio.run(run(skip_db=skip_db))
     end_time = time.time()
     elapsed = end_time - start_time
     logger.info("\n" + "=" * 60)
