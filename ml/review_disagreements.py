@@ -145,9 +145,18 @@ class DisagreementReviewer:
                     print(f"  ML found: {ml_value}")
                     print(f"  Regex found: Nothing")
 
-                    choice = input(f"  Is ML correct? (y/n/custom value): ").strip().lower()
+                    choice = input(f"  Is ML correct? (y/n/custom value/skip/quit): ").strip().lower()
 
-                    if choice == 'y' or choice == '':
+                    if choice == 'skip':
+                        print("  ⏭️  Skipping this example")
+                        skipped.append(case)
+                        skip_this_case = True
+                        break
+                    elif choice == 'quit':
+                        print("\n💾 Saving progress and exiting...")
+                        self._save_reviewed_data(reviewed_data, skipped, queue[i:])
+                        return
+                    elif choice == 'y' or choice == '':
                         corrected_result[field] = ml_value
                         print(f"  ✓ Confirmed: {ml_value}")
                     elif choice == 'n':
@@ -164,6 +173,9 @@ class DisagreementReviewer:
                             corrected_result[field] = ml_value
                             print(f"  ⚠️  Invalid input, keeping ML value")
 
+                    if skip_this_case:
+                        break
+
                 elif field in case['comparison']['regex_only']:
                     # Only Regex found
                     print(f"\n{'─'*40}")
@@ -171,9 +183,18 @@ class DisagreementReviewer:
                     print(f"  ML found: Nothing")
                     print(f"  Regex found: {regex_value}")
 
-                    choice = input(f"  Is Regex correct? (y/n/custom value): ").strip().lower()
+                    choice = input(f"  Is Regex correct? (y/n/custom value/skip/quit): ").strip().lower()
 
-                    if choice == 'y' or choice == '':
+                    if choice == 'skip':
+                        print("  ⏭️  Skipping this example")
+                        skipped.append(case)
+                        skip_this_case = True
+                        break
+                    elif choice == 'quit':
+                        print("\n💾 Saving progress and exiting...")
+                        self._save_reviewed_data(reviewed_data, skipped, queue[i:])
+                        return
+                    elif choice == 'y' or choice == '':
                         corrected_result[field] = regex_value
                         print(f"  ✓ Confirmed: {regex_value}")
                     elif choice == 'n':
@@ -189,6 +210,9 @@ class DisagreementReviewer:
                         except ValueError:
                             corrected_result[field] = regex_value
                             print(f"  ⚠️  Invalid input, keeping Regex value")
+
+                    if skip_this_case:
+                        break
 
                 else:
                     # Both agree or both empty
