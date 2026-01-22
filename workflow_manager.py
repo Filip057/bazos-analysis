@@ -212,11 +212,77 @@ class WorkflowManager:
 
         input("\nPress Enter to continue...")
 
-    def retrain_model(self):
-        """Option 4: Retrain model"""
+    def train_initial_model(self):
+        """Option 4: Train initial model from scratch"""
         self.print_header()
-        print("🎓 RETRAIN MODEL")
+        print("🎓 TRAIN INITIAL MODEL (First Time)")
         print("-" * 70)
+        print()
+        print("This trains a NEW model from your original labeled data.")
+        print("Use this on a new machine or when starting fresh.")
+        print()
+
+        # Check if training data exists
+        training_file = self.project_root / 'training_data_labeled.json'
+        if not training_file.exists():
+            print("❌ training_data_labeled.json not found!")
+            print()
+            print("You need labeled training data to train a model.")
+            input("\nPress Enter to continue...")
+            return
+
+        # Check data quality
+        try:
+            with open(training_file, 'r') as f:
+                data = json.load(f)
+                count = len(data)
+                print(f"📊 Training data: {count} labeled examples")
+        except:
+            print("⚠️  Could not read training_data_labeled.json")
+            count = 0
+
+        if count < 50:
+            print()
+            print("⚠️  WARNING: Less than 50 examples!")
+            print("   Recommended: At least 100-200 examples for good accuracy")
+
+        print()
+        print("Options:")
+        print("  1. Train with default settings (30 iterations)")
+        print("  2. Train with custom iterations")
+        print("  3. Analyze training data quality first")
+        print("  4. Back to main menu")
+        print()
+
+        choice = input("Choose option (1-4): ").strip()
+
+        if choice == '1':
+            self.run_command(
+                "python3 -m ml.train_ml_model --data training_data_labeled.json --iterations 30",
+                "Training initial model (30 iterations)"
+            )
+        elif choice == '2':
+            iterations = input("Number of iterations (recommended 30-100): ").strip()
+            iterations = iterations if iterations else "30"
+            self.run_command(
+                f"python3 -m ml.train_ml_model --data training_data_labeled.json --iterations {iterations}",
+                f"Training initial model ({iterations} iterations)"
+            )
+        elif choice == '3':
+            self.check_training_data_quality()
+            return self.train_initial_model()  # Return to this menu
+        else:
+            return
+
+        input("\nPress Enter to continue...")
+
+    def retrain_model(self):
+        """Option 5: Retrain model with accumulated data"""
+        self.print_header()
+        print("🔄 RETRAIN MODEL (With New Data)")
+        print("-" * 70)
+        print()
+        print("This retrains your existing model with accumulated production data.")
         print()
 
         # Check data sources
@@ -247,7 +313,9 @@ class WorkflowManager:
         print()
 
         if total_examples == 0:
-            print("❌ No training data found! Cannot retrain.")
+            print("❌ No training data found!")
+            print()
+            print("💡 Use 'Train Initial Model' first to create a model from scratch.")
             input("\nPress Enter to continue...")
             return
 
@@ -271,6 +339,160 @@ class WorkflowManager:
                 f"python3 -m ml.retrain_model --iterations {iterations}",
                 f"Retraining model ({iterations} iterations)"
             )
+        else:
+            return
+
+        input("\nPress Enter to continue...")
+
+    def evaluate_model_quality(self):
+        """Option 6: Evaluate model quality"""
+        self.print_header()
+        print("📊 EVALUATE MODEL QUALITY")
+        print("-" * 70)
+        print()
+
+        # Check if model exists
+        model_path = self.project_root / 'ml_models' / 'car_ner'
+        if not model_path.exists():
+            print("❌ No trained model found!")
+            print()
+            print("💡 Train a model first using 'Train Initial Model'")
+            input("\nPress Enter to continue...")
+            return
+
+        # Check if test data exists
+        training_file = self.project_root / 'training_data_labeled.json'
+        if not training_file.exists():
+            print("❌ training_data_labeled.json not found!")
+            print()
+            print("Cannot evaluate without test data.")
+            input("\nPress Enter to continue...")
+            return
+
+        print("This will evaluate your model against test data to measure accuracy.")
+        print()
+        print("Metrics shown:")
+        print("  - Precision: How many predictions are correct")
+        print("  - Recall: How many true entities are found")
+        print("  - F1 Score: Balance between precision and recall (target: 80%+)")
+        print()
+        print("Options:")
+        print("  1. Evaluate current model")
+        print("  2. Evaluate with custom test split (default 20%)")
+        print("  3. Back to main menu")
+        print()
+
+        choice = input("Choose option (1-3): ").strip()
+
+        if choice == '1':
+            self.run_command(
+                "python3 -m ml.train_ml_model --data training_data_labeled.json --evaluate-only",
+                "Evaluating model quality"
+            )
+        elif choice == '2':
+            test_split = input("Test split percentage (default 20): ").strip()
+            test_split = test_split if test_split else "20"
+            test_split_decimal = float(test_split) / 100
+            self.run_command(
+                f"python3 -m ml.train_ml_model --data training_data_labeled.json --evaluate-only --test-split {test_split_decimal}",
+                f"Evaluating model (test split: {test_split}%)"
+            )
+        else:
+            return
+
+        input("\nPress Enter to continue...")
+
+    def check_training_data_quality(self):
+        """Option 7: Check training data quality"""
+        self.print_header()
+        print("🔍 CHECK TRAINING DATA QUALITY")
+        print("-" * 70)
+        print()
+
+        # Check all training data sources
+        sources = {
+            'training_data_labeled.json': 'Original labeled data',
+            'auto_training_data.json': 'Auto-collected (agreements)',
+            'manual_review_data.json': 'Manual corrections'
+        }
+
+        print("This analyzes your training data for:")
+        print("  - Entity distribution (MILEAGE, YEAR, POWER, FUEL)")
+        print("  - Labeling errors (invalid positions)")
+        print("  - Data balance")
+        print()
+
+        print("Available files:")
+        files_to_check = []
+        for filename, description in sources.items():
+            path = self.project_root / filename
+            if path.exists():
+                try:
+                    with open(path, 'r') as f:
+                        data = json.load(f)
+                        count = len(data)
+                        print(f"  ✓ {filename:<30} {count:>4} examples")
+                        files_to_check.append(filename)
+                except:
+                    print(f"  ✓ {filename:<30} (exists)")
+            else:
+                print(f"  ✗ {filename:<30} (not found)")
+
+        if not files_to_check:
+            print()
+            print("❌ No training data files found!")
+            input("\nPress Enter to continue...")
+            return
+
+        print()
+        print("Options:")
+        print("  1. Check original labeled data")
+        print("  2. Check all training data sources combined")
+        print("  3. Back to main menu")
+        print()
+
+        choice = input("Choose option (1-3): ").strip()
+
+        if choice == '1':
+            self.run_command(
+                "python3 -m ml.train_ml_model --data training_data_labeled.json --analyze-only",
+                "Analyzing original labeled data"
+            )
+        elif choice == '2':
+            # Combine all sources for analysis
+            print()
+            print("Analyzing all training data sources...")
+            combined_data = []
+
+            for filename in files_to_check:
+                try:
+                    with open(self.project_root / filename, 'r') as f:
+                        data = json.load(f)
+                        if isinstance(data, list):
+                            for item in data:
+                                if isinstance(item, (list, tuple)):
+                                    combined_data.append(item)
+                                elif isinstance(item, dict) and 'data' in item:
+                                    combined_data.append(item['data'])
+                except Exception as e:
+                    print(f"  ⚠️  Could not read {filename}: {e}")
+
+            # Save temporarily
+            temp_file = self.project_root / 'temp_combined_training.json'
+            with open(temp_file, 'w') as f:
+                json.dump(combined_data, f, ensure_ascii=False, indent=2)
+
+            print(f"  Combined {len(combined_data)} examples from all sources")
+            print()
+
+            self.run_command(
+                "python3 -m ml.train_ml_model --data temp_combined_training.json --analyze-only",
+                "Analyzing combined training data"
+            )
+
+            # Clean up temp file
+            if temp_file.exists():
+                temp_file.unlink()
         else:
             return
 
@@ -420,19 +642,27 @@ class WorkflowManager:
 
         print("WORKFLOW OPTIONS:")
         print("-" * 70)
-        print("  1. 📊 Scrape Data               - Get car listings with RAW extraction")
-        print("  2. 🧹 Clean Duplicates          - Remove duplicate review entries")
-        print("  3. 🔍 Review Disagreements      - Label RAW data for training")
-        print("  4. 🎓 Retrain Model             - Retrain with accumulated data")
-        print("  5. 📈 View Statistics           - Check extraction accuracy")
-        print("  6. 🔧 Normalize Data            - Preview normalization (DB format)")
-        print("  7. ⚠️  Reset Workflow            - Delete all generated files")
-        print("  8. 📖 View Documentation        - Open WORKFLOW.md")
-        print("  9. ❌ Exit")
+        print("\n📊 DATA COLLECTION:")
+        print("  1. Scrape Data               - Get car listings with RAW extraction")
+        print("  2. Clean Duplicates          - Remove duplicate review entries")
+        print("  3. Review Disagreements      - Label RAW data for training")
+        print()
+        print("🎓 MODEL TRAINING & QUALITY:")
+        print("  4. Train Initial Model       - First time training (from scratch)")
+        print("  5. Retrain Model             - Retrain with accumulated data")
+        print("  6. Evaluate Model Quality    - Test model accuracy (F1 score)")
+        print("  7. Check Training Data       - Analyze data quality & distribution")
+        print()
+        print("🔧 TOOLS & UTILITIES:")
+        print("  8. View Statistics           - Check extraction accuracy")
+        print("  9. Normalize Data            - Preview normalization (DB format)")
+        print(" 10. Reset Workflow            - Delete all generated files")
+        print(" 11. View Documentation        - Open WORKFLOW.md")
+        print(" 12. Exit")
         print("-" * 70)
         print()
 
-        choice = input("Choose option (1-9): ").strip()
+        choice = input("Choose option (1-12): ").strip()
 
         return choice
 
@@ -479,22 +709,28 @@ class WorkflowManager:
                 elif choice == '3':
                     self.review_disagreements()
                 elif choice == '4':
-                    self.retrain_model()
+                    self.train_initial_model()
                 elif choice == '5':
-                    self.view_stats()
+                    self.retrain_model()
                 elif choice == '6':
-                    self.normalize_data()
+                    self.evaluate_model_quality()
                 elif choice == '7':
-                    self.reset_workflow()
+                    self.check_training_data_quality()
                 elif choice == '8':
-                    self.view_documentation()
+                    self.view_stats()
                 elif choice == '9':
+                    self.normalize_data()
+                elif choice == '10':
+                    self.reset_workflow()
+                elif choice == '11':
+                    self.view_documentation()
+                elif choice == '12':
                     self.print_header()
                     print("👋 Goodbye!")
                     print()
                     sys.exit(0)
                 else:
-                    print("\n❌ Invalid option. Please choose 1-9.")
+                    print("\n❌ Invalid option. Please choose 1-12.")
                     input("Press Enter to continue...")
 
             except KeyboardInterrupt:
