@@ -196,31 +196,28 @@ class ProductionExtractor:
         """
         self.stats['total_extractions'] += 1
 
-        # 1. ML Extraction (raw)
+        # 1. ML Extraction (RAW - keep as-is from text)
         ml_result_raw = self.ml_extractor.extract(text)
 
-        # 2. Context-aware regex extraction (raw)
+        # 2. Context-aware regex extraction (RAW - keep as-is from text)
         regex_result_raw = self._extract_with_regex(text)
 
-        # 3. NORMALIZE BOTH before comparison (fixes benzín vs benzin issue)
-        normalizer = DataNormalizer()
-        ml_result = self._normalize_result(ml_result_raw, normalizer)
-        regex_result = self._normalize_result(regex_result_raw, normalizer)
+        # 3. Compare RAW results (exact match only!)
+        #    "dieselový" != "diesel" → disagreement (you want to see this!)
+        #    "145 KW" != "145" → disagreement (you want to see this!)
+        comparison = self._compare_results(ml_result_raw, regex_result_raw)
 
-        # 4. Compare NORMALIZED results (benzín == benzín now!)
-        comparison = self._compare_results(ml_result, regex_result)
-
-        # 5. Make decision based on comparison
-        final_result, confidence = self._decide_final_result(
-            ml_result,
-            regex_result,
+        # 4. Make decision based on RAW comparison
+        final_result_raw, confidence = self._decide_final_result(
+            ml_result_raw,
+            regex_result_raw,
             comparison
         )
 
-        # 5. Handle based on agreement level
+        # 5. Handle based on agreement level (save RAW data!)
         if comparison['agreement_level'] == 'full':
-            # High confidence - auto-add to training data
-            self._add_to_auto_training(text, final_result, car_id)
+            # High confidence - auto-add to training data (RAW)
+            self._add_to_auto_training(text, final_result_raw, car_id)
             self.stats['full_agreements'] += 1
 
         elif comparison['agreement_level'] == 'partial':
@@ -229,22 +226,27 @@ class ProductionExtractor:
             logger.debug(f"Partial agreement on car {car_id}: {comparison['disagreements']}")
 
         elif comparison['agreement_level'] == 'none':
-            # Low confidence - flag for review
-            self._add_to_review_queue(text, ml_result, regex_result, car_id, comparison)
+            # Low confidence - flag for review (RAW data!)
+            self._add_to_review_queue(text, ml_result_raw, regex_result_raw, car_id, comparison)
             self.stats['disagreements'] += 1
 
         # 6. Update field statistics
         self._update_field_stats(comparison)
 
-        # 7. Prepare response (already normalized in step 3)
+        # 7. Normalize ONLY for database (separate step)
+        #    Training data uses RAW, database uses normalized
+        normalizer = DataNormalizer()
+        final_result_normalized = self._normalize_result(final_result_raw, normalizer)
+
+        # 8. Prepare response (normalized for DB, RAW for training)
         response = {
-            **final_result,  # Already normalized
+            **final_result_normalized,  # Normalized for database
             'confidence': confidence,
             'agreement': comparison['agreement_level'],
             'flagged_for_review': comparison['agreement_level'] == 'none',
             'car_id': car_id,
-            # Include raw values for debugging
-            'raw_values': ml_result_raw if logger.isEnabledFor(logging.DEBUG) else None
+            # Keep raw values for debugging/training
+            'raw_values': final_result_raw
         }
 
         return response
