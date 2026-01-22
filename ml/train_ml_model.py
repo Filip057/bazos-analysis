@@ -121,6 +121,16 @@ def main():
         default="./ml_models/car_ner",
         help="Output directory for trained model"
     )
+    parser.add_argument(
+        "--analyze-only",
+        action="store_true",
+        help="Only analyze training data quality, don't train"
+    )
+    parser.add_argument(
+        "--evaluate-only",
+        action="store_true",
+        help="Only evaluate existing model, don't train"
+    )
 
     args = parser.parse_args()
 
@@ -137,8 +147,51 @@ def main():
     # Analyze data
     analyze_training_data(training_data)
 
+    # If analyze-only, stop here
+    if args.analyze_only:
+        logger.info("\n✅ Analysis complete!")
+        logger.info("\n💡 Data looks good? Train with:")
+        logger.info(f"   python3 -m ml.train_ml_model --data {args.data} --iterations {args.iterations}")
+        return
+
     # Split into train/test
     train_data, test_data = split_train_test(training_data, args.test_split)
+
+    # If evaluate-only, load existing model and evaluate
+    if args.evaluate_only:
+        logger.info("\n📊 Evaluating existing model...")
+
+        # Check if model exists
+        if not Path(args.output).exists():
+            logger.error(f"❌ Model not found at {args.output}")
+            logger.error("   Train a model first!")
+            return
+
+        # Load existing model
+        extractor = CarDataExtractor(args.output)
+
+        if test_data:
+            scores = extractor.evaluate(test_data)
+
+            logger.info(f"\n{'='*60}")
+            logger.info(f"Model Performance:")
+            logger.info(f"  Precision: {scores['precision']:.1%} (how many predictions were correct)")
+            logger.info(f"  Recall:    {scores['recall']:.1%} (how many entities were found)")
+            logger.info(f"  F1 Score:  {scores['f1']:.1%} (overall accuracy)")
+            logger.info(f"{'='*60}\n")
+
+            if scores['f1'] < 0.7:
+                logger.warning("⚠️  Model F1 score is below 70%")
+                logger.warning("   Try adding more training data or retraining")
+            elif scores['f1'] >= 0.8:
+                logger.info("✅ Excellent! F1 score is 80%+ ")
+        else:
+            logger.error("❌ No test data available for evaluation")
+
+        logger.info("\n✅ Evaluation complete!")
+        return
+
+    # Continue with training...
 
     if len(test_data) == 0:
         logger.warning("Not enough data for test set. Using all for training.")
