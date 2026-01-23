@@ -102,8 +102,172 @@ class WorkflowManager:
             print(f"\n❌ Error: {e}")
             return False
 
+    def scrape_for_training(self):
+        """Option 1: Scrape real data from Bazos for training"""
+        self.print_header()
+        print("🌐 SCRAPE FOR TRAINING")
+        print("-" * 70)
+        print()
+        print("This scrapes REAL car descriptions from Bazos.cz for labeling.")
+        print("Much better than synthetic examples!")
+        print()
+        print("You can scrape:")
+        print("  • Single brand (e.g., 'skoda' or 'toyota')")
+        print("  • Multiple brands with counts (e.g., 'toyota:17 skoda:17')")
+        print()
+
+        choice = input("Choose: (1) Single brand  (2) Mixed brands  (3) Cancel: ").strip()
+
+        if choice == '1':
+            brand = input("Enter brand name (e.g., skoda, toyota, volkswagen): ").strip().lower()
+            if not brand:
+                print("❌ Brand name required!")
+                input("\nPress Enter to continue...")
+                return
+
+            limit = input("How many cars to scrape? (default: 50): ").strip()
+            if not limit:
+                limit = "50"
+
+            output = f"training_{brand}.json"
+
+            self.run_command(
+                f"python3 -m labeling.scrape_for_training --brand {brand} --limit {limit} --output {output}",
+                f"Scraping {limit} {brand} cars for training"
+            )
+
+        elif choice == '2':
+            print()
+            print("Enter brands with counts, e.g.: toyota:17 skoda:17 volkswagen:16")
+            brands = input("Brands: ").strip()
+            if not brands:
+                print("❌ Brands required!")
+                input("\nPress Enter to continue...")
+                return
+
+            output = input("Output filename (default: training_mixed.json): ").strip()
+            if not output:
+                output = "training_mixed.json"
+
+            self.run_command(
+                f"python3 -m labeling.scrape_mixed_brands --brands {brands} --output {output}",
+                "Scraping mixed brands for training"
+            )
+        else:
+            return
+
+        input("\nPress Enter to continue...")
+
+    def filter_training_data(self):
+        """Option 2: Filter training data - keep only rich examples"""
+        self.print_header()
+        print("🔍 FILTER TRAINING DATA")
+        print("-" * 70)
+        print()
+        print("This filters out examples with no useful data.")
+        print("Keeps only examples where regex found at least 1/4 fields.")
+        print()
+        print("This saves time - you won't label empty examples!")
+        print()
+
+        # Show available raw training files
+        print("Available training files:")
+        training_files = list(self.project_root.glob("training_*.json"))
+        if not training_files:
+            print("❌ No training_*.json files found!")
+            print()
+            print("Run 'Scrape For Training' first to get raw data.")
+            input("\nPress Enter to continue...")
+            return
+
+        for i, file in enumerate(training_files, 1):
+            try:
+                with open(file, 'r') as f:
+                    data = json.load(f)
+                    print(f"  {i}. {file.name} ({len(data)} examples)")
+            except:
+                print(f"  {i}. {file.name}")
+
+        print()
+        input_file = input("Enter input filename (e.g., training_skoda.json): ").strip()
+        if not input_file:
+            print("❌ Filename required!")
+            input("\nPress Enter to continue...")
+            return
+
+        output_file = input("Enter output filename (default: filtered_training_skoda.json): ").strip()
+        if not output_file:
+            output_file = f"filtered_{input_file}"
+
+        self.run_command(
+            f"python3 -m labeling.filter_training_data --input {input_file} --output {output_file}",
+            "Filtering training data"
+        )
+
+        input("\nPress Enter to continue...")
+
+    def label_data_assisted(self):
+        """Option 4: Label data with regex assistance (FASTER)"""
+        self.print_header()
+        print("🚀 LABEL DATA (ASSISTED - MUCH FASTER!)")
+        print("-" * 70)
+        print()
+        print("This is 5-10x FASTER than manual labeling!")
+        print()
+        print("How it works:")
+        print("  • Regex automatically finds entities and highlights them")
+        print("  • You just press Enter to accept or type correction")
+        print("  • Perfect for quick labeling of 50-100 examples")
+        print()
+
+        # Check if filtered data exists
+        input_file = self.project_root / 'filtered_training_skoda.json'
+        output_file = self.project_root / 'training_data_labeled.json'
+
+        # Show available filtered files
+        print("Available filtered files:")
+        filtered_files = list(self.project_root.glob("filtered_*.json"))
+        if not filtered_files:
+            print("❌ No filtered_*.json files found!")
+            print()
+            print("Run 'Filter Training Data' first to prepare data.")
+            input("\nPress Enter to continue...")
+            return
+
+        for i, file in enumerate(filtered_files, 1):
+            try:
+                with open(file, 'r') as f:
+                    data = json.load(f)
+                    print(f"  {i}. {file.name} ({len(data)} examples)")
+            except:
+                print(f"  {i}. {file.name}")
+
+        print()
+        input_choice = input("Enter input filename (default: filtered_training_skoda.json): ").strip()
+        if input_choice:
+            input_file = self.project_root / input_choice
+
+        if not input_file.exists():
+            print(f"❌ {input_file.name} not found!")
+            input("\nPress Enter to continue...")
+            return
+
+        print()
+        print("How many examples to label?")
+        print("(Recommendation: 50-100 for good initial model)")
+        limit = input("Enter number (or press Enter for 50): ").strip()
+        if not limit:
+            limit = "50"
+
+        self.run_command(
+            f"python3 -m labeling.label_data_assisted --input {input_file} --output {output_file} --limit {limit}",
+            f"Assisted labeling of {limit} examples"
+        )
+
+        input("\nPress Enter to continue...")
+
     def label_new_data(self):
-        """Option 1: Label new data manually"""
+        """Option 3: Label new data manually"""
         self.print_header()
         print("📝 LABEL NEW DATA")
         print("-" * 70)
@@ -141,7 +305,7 @@ class WorkflowManager:
         )
 
     def validate_labels(self):
-        """Option 2: Validate labeled data"""
+        """Option 5: Validate labeled data"""
         self.print_header()
         print("✅ VALIDATE LABELS")
         print("-" * 70)
@@ -170,7 +334,7 @@ class WorkflowManager:
         )
 
     def scrape_data(self):
-        """Option 3: Scrape data"""
+        """Option 6: Scrape data"""
         self.print_header()
         print("📊 SCRAPE DATA")
         print("-" * 70)
@@ -202,7 +366,7 @@ class WorkflowManager:
         input("\nPress Enter to continue...")
 
     def clean_duplicates(self):
-        """Option 4: Clean duplicates"""
+        """Option 7: Clean duplicates"""
         self.print_header()
         print("🧹 CLEAN DUPLICATES")
         print("-" * 70)
@@ -239,7 +403,7 @@ class WorkflowManager:
         input("\nPress Enter to continue...")
 
     def review_disagreements(self):
-        """Option 5: Review disagreements"""
+        """Option 8: Review disagreements"""
         self.print_header()
         print("🔍 REVIEW DISAGREEMENTS")
         print("-" * 70)
@@ -280,7 +444,7 @@ class WorkflowManager:
         input("\nPress Enter to continue...")
 
     def train_initial_model(self):
-        """Option 6: Train initial model from scratch"""
+        """Option 9: Train initial model from scratch"""
         self.print_header()
         print("🎓 TRAIN INITIAL MODEL (First Time)")
         print("-" * 70)
@@ -344,7 +508,7 @@ class WorkflowManager:
         input("\nPress Enter to continue...")
 
     def retrain_model(self):
-        """Option 7: Retrain model with accumulated data"""
+        """Option 10: Retrain model with accumulated data"""
         self.print_header()
         print("🔄 RETRAIN MODEL (With New Data)")
         print("-" * 70)
@@ -412,7 +576,7 @@ class WorkflowManager:
         input("\nPress Enter to continue...")
 
     def evaluate_model_quality(self):
-        """Option 8: Evaluate model quality"""
+        """Option 11: Evaluate model quality"""
         self.print_header()
         print("📊 EVALUATE MODEL QUALITY")
         print("-" * 70)
@@ -470,7 +634,7 @@ class WorkflowManager:
         input("\nPress Enter to continue...")
 
     def check_training_data_quality(self):
-        """Option 9: Check training data quality"""
+        """Option 12: Check training data quality"""
         self.print_header()
         print("🔍 CHECK TRAINING DATA QUALITY")
         print("-" * 70)
@@ -566,7 +730,7 @@ class WorkflowManager:
         input("\nPress Enter to continue...")
 
     def view_stats(self):
-        """Option 10: View statistics"""
+        """Option 13: View statistics"""
         self.print_header()
         print("📊 EXTRACTION STATISTICS")
         print("-" * 70)
@@ -609,7 +773,7 @@ class WorkflowManager:
         input("\nPress Enter to continue...")
 
     def normalize_data(self):
-        """Option 11: Normalize data"""
+        """Option 14: Normalize data"""
         self.print_header()
         print("🔧 NORMALIZE DATA")
         print("-" * 70)
@@ -652,7 +816,7 @@ class WorkflowManager:
         input("\nPress Enter to continue...")
 
     def reset_workflow(self):
-        """Option 12: Reset workflow"""
+        """Option 15: Reset workflow"""
         self.print_header()
         print("⚠️  RESET WORKFLOW")
         print("-" * 70)
@@ -710,35 +874,38 @@ class WorkflowManager:
         print("WORKFLOW OPTIONS:")
         print("-" * 70)
         print("\n📝 DATA LABELING (Create Training Data):")
-        print("  1. Label New Data            - Manual labeling tool")
-        print("  2. Validate Labels           - Check for labeling errors")
+        print("  1. Scrape For Training       - Scrape real Bazos data for labeling")
+        print("  2. Filter Training Data      - Keep only rich examples")
+        print("  3. Label Data (Manual)       - Manual labeling tool")
+        print("  4. Label Data (Assisted)     - Assisted labeling with regex (FASTER)")
+        print("  5. Validate Labels           - Check for labeling errors")
         print()
         print("📊 DATA COLLECTION:")
-        print("  3. Scrape Data               - Get car listings with RAW extraction")
-        print("  4. Clean Duplicates          - Remove duplicate review entries")
-        print("  5. Review Disagreements      - Label RAW data for training")
+        print("  6. Scrape Data               - Get car listings with RAW extraction")
+        print("  7. Clean Duplicates          - Remove duplicate review entries")
+        print("  8. Review Disagreements      - Label RAW data for training")
         print()
         print("🎓 MODEL TRAINING & QUALITY:")
-        print("  6. Train Initial Model       - First time training (from scratch)")
-        print("  7. Retrain Model             - Retrain with accumulated data")
-        print("  8. Evaluate Model Quality    - Test model accuracy (F1 score)")
-        print("  9. Check Training Data       - Analyze data quality & distribution")
+        print("  9. Train Initial Model       - First time training (from scratch)")
+        print(" 10. Retrain Model             - Retrain with accumulated data")
+        print(" 11. Evaluate Model Quality    - Test model accuracy (F1 score)")
+        print(" 12. Check Training Data       - Analyze data quality & distribution")
         print()
         print("🔧 TOOLS & UTILITIES:")
-        print(" 10. View Statistics           - Check extraction accuracy")
-        print(" 11. Normalize Data            - Preview normalization (DB format)")
-        print(" 12. Reset Workflow            - Delete all generated files")
-        print(" 13. View Documentation        - Open WORKFLOW.md")
-        print(" 14. Exit")
+        print(" 13. View Statistics           - Check extraction accuracy")
+        print(" 14. Normalize Data            - Preview normalization (DB format)")
+        print(" 15. Reset Workflow            - Delete all generated files")
+        print(" 16. View Documentation        - Open WORKFLOW.md")
+        print(" 17. Exit")
         print("-" * 70)
         print()
 
-        choice = input("Choose option (1-14): ").strip()
+        choice = input("Choose option (1-17): ").strip()
 
         return choice
 
     def view_documentation(self):
-        """Option 13: View documentation"""
+        """Option 16: View documentation"""
         self.print_header()
         print("📖 DOCUMENTATION")
         print("-" * 70)
@@ -774,38 +941,44 @@ class WorkflowManager:
                 choice = self.show_menu()
 
                 if choice == '1':
-                    self.label_new_data()
+                    self.scrape_for_training()
                 elif choice == '2':
-                    self.validate_labels()
+                    self.filter_training_data()
                 elif choice == '3':
-                    self.scrape_data()
+                    self.label_new_data()
                 elif choice == '4':
-                    self.clean_duplicates()
+                    self.label_data_assisted()
                 elif choice == '5':
-                    self.review_disagreements()
+                    self.validate_labels()
                 elif choice == '6':
-                    self.train_initial_model()
+                    self.scrape_data()
                 elif choice == '7':
-                    self.retrain_model()
+                    self.clean_duplicates()
                 elif choice == '8':
-                    self.evaluate_model_quality()
+                    self.review_disagreements()
                 elif choice == '9':
-                    self.check_training_data_quality()
+                    self.train_initial_model()
                 elif choice == '10':
-                    self.view_stats()
+                    self.retrain_model()
                 elif choice == '11':
-                    self.normalize_data()
+                    self.evaluate_model_quality()
                 elif choice == '12':
-                    self.reset_workflow()
+                    self.check_training_data_quality()
                 elif choice == '13':
-                    self.view_documentation()
+                    self.view_stats()
                 elif choice == '14':
+                    self.normalize_data()
+                elif choice == '15':
+                    self.reset_workflow()
+                elif choice == '16':
+                    self.view_documentation()
+                elif choice == '17':
                     self.print_header()
                     print("👋 Goodbye!")
                     print()
                     sys.exit(0)
                 else:
-                    print("\n❌ Invalid option. Please choose 1-14.")
+                    print("\n❌ Invalid option. Please choose 1-17.")
                     input("Press Enter to continue...")
 
             except KeyboardInterrupt:
