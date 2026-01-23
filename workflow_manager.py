@@ -132,7 +132,7 @@ class WorkflowManager:
             output = f"training_{brand}.json"
 
             self.run_command(
-                f"python3 -m labeling.scrape_for_training --brand {brand} --limit {limit} --output {output}",
+                f'python3 -m labeling.scrape_for_training --brand {brand} --limit {limit} --output "{output}"',
                 f"Scraping {limit} {brand} cars for training"
             )
 
@@ -150,7 +150,7 @@ class WorkflowManager:
                 output = "training_mixed.json"
 
             self.run_command(
-                f"python3 -m labeling.scrape_mixed_brands --brands {brands} --output {output}",
+                f'python3 -m labeling.scrape_mixed_brands --brands {brands} --output "{output}"',
                 "Scraping mixed brands for training"
             )
         else:
@@ -200,7 +200,7 @@ class WorkflowManager:
             output_file = f"filtered_{input_file}"
 
         self.run_command(
-            f"python3 -m labeling.filter_training_data --input {input_file} --output {output_file}",
+            f'python3 -m labeling.filter_training_data --input "{input_file}" --output "{output_file}"',
             "Filtering training data"
         )
 
@@ -260,7 +260,7 @@ class WorkflowManager:
             limit = "50"
 
         self.run_command(
-            f"python3 -m labeling.label_data_assisted --input {input_file} --output {output_file} --limit {limit}",
+            f'python3 -m labeling.label_data_assisted --input "{input_file}" --output "{output_file}" --limit {limit}',
             f"Assisted labeling of {limit} examples"
         )
 
@@ -300,7 +300,7 @@ class WorkflowManager:
             limit = "30"
 
         self.run_command(
-            f"python3 -m labeling.label_data --input {input_file} --output {output_file} --limit {limit}",
+            f'python3 -m labeling.label_data --input "{input_file}" --output "{output_file}" --limit {limit}',
             f"Labeling {limit} examples"
         )
 
@@ -329,7 +329,7 @@ class WorkflowManager:
         print()
 
         self.run_command(
-            f"python3 -m labeling.validate_labels {training_file}",
+            f'python3 -m labeling.validate_labels "{training_file}"',
             "Validating labeled data"
         )
 
