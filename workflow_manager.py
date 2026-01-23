@@ -102,8 +102,75 @@ class WorkflowManager:
             print(f"\n❌ Error: {e}")
             return False
 
+    def label_new_data(self):
+        """Option 1: Label new data manually"""
+        self.print_header()
+        print("📝 LABEL NEW DATA")
+        print("-" * 70)
+        print()
+        print("This tool helps you create training data for the ML model.")
+        print("You'll manually label entities (MILEAGE, YEAR, POWER, FUEL) in car descriptions.")
+        print()
+
+        # Check if filtered_training_skoda.json exists
+        input_file = self.project_root / 'filtered_training_skoda.json'
+        output_file = self.project_root / 'training_data_labeled.json'
+
+        if not input_file.exists():
+            print("❌ filtered_training_skoda.json not found!")
+            print()
+            print("You need to prepare a JSON file with car descriptions first.")
+            print("See labeling/filter_training_data.py for help.")
+            input("\nPress Enter to continue...")
+            return
+
+        print(f"Input file:  {input_file.name}")
+        print(f"Output file: {output_file.name}")
+        print()
+        print("How many examples do you want to label?")
+        print("(Recommendation: Start with 30-50 for initial model)")
+        print()
+
+        limit = input("Enter number of examples (or press Enter for 30): ").strip()
+        if not limit:
+            limit = "30"
+
+        self.run_command(
+            f"python3 -m labeling.label_data --input {input_file} --output {output_file} --limit {limit}",
+            f"Labeling {limit} examples"
+        )
+
+    def validate_labels(self):
+        """Option 2: Validate labeled data"""
+        self.print_header()
+        print("✅ VALIDATE LABELS")
+        print("-" * 70)
+        print()
+        print("This tool checks for labeling errors:")
+        print("  • Overlapping entities (same text labeled as multiple types)")
+        print("  • Misaligned entities (text not found in original)")
+        print("  • Invalid ranges")
+        print()
+
+        training_file = self.project_root / 'training_data_labeled.json'
+
+        if not training_file.exists():
+            print("❌ training_data_labeled.json not found!")
+            print()
+            print("You need to label data first using Option 1 (Label New Data)")
+            input("\nPress Enter to continue...")
+            return
+
+        print(f"Validating: {training_file.name}")
+        print()
+
+        self.run_command(
+            f"python3 -m labeling.validate_labels {training_file}",
+            "Validating labeled data"
+        )
+
     def scrape_data(self):
-        """Option 1: Scrape data"""
+        """Option 3: Scrape data"""
         self.print_header()
         print("📊 SCRAPE DATA")
         print("-" * 70)
@@ -135,7 +202,7 @@ class WorkflowManager:
         input("\nPress Enter to continue...")
 
     def clean_duplicates(self):
-        """Option 2: Clean duplicates"""
+        """Option 4: Clean duplicates"""
         self.print_header()
         print("🧹 CLEAN DUPLICATES")
         print("-" * 70)
@@ -172,7 +239,7 @@ class WorkflowManager:
         input("\nPress Enter to continue...")
 
     def review_disagreements(self):
-        """Option 3: Review disagreements"""
+        """Option 5: Review disagreements"""
         self.print_header()
         print("🔍 REVIEW DISAGREEMENTS")
         print("-" * 70)
@@ -213,7 +280,7 @@ class WorkflowManager:
         input("\nPress Enter to continue...")
 
     def train_initial_model(self):
-        """Option 4: Train initial model from scratch"""
+        """Option 6: Train initial model from scratch"""
         self.print_header()
         print("🎓 TRAIN INITIAL MODEL (First Time)")
         print("-" * 70)
@@ -277,7 +344,7 @@ class WorkflowManager:
         input("\nPress Enter to continue...")
 
     def retrain_model(self):
-        """Option 5: Retrain model with accumulated data"""
+        """Option 7: Retrain model with accumulated data"""
         self.print_header()
         print("🔄 RETRAIN MODEL (With New Data)")
         print("-" * 70)
@@ -345,7 +412,7 @@ class WorkflowManager:
         input("\nPress Enter to continue...")
 
     def evaluate_model_quality(self):
-        """Option 6: Evaluate model quality"""
+        """Option 8: Evaluate model quality"""
         self.print_header()
         print("📊 EVALUATE MODEL QUALITY")
         print("-" * 70)
@@ -403,7 +470,7 @@ class WorkflowManager:
         input("\nPress Enter to continue...")
 
     def check_training_data_quality(self):
-        """Option 7: Check training data quality"""
+        """Option 9: Check training data quality"""
         self.print_header()
         print("🔍 CHECK TRAINING DATA QUALITY")
         print("-" * 70)
@@ -499,7 +566,7 @@ class WorkflowManager:
         input("\nPress Enter to continue...")
 
     def view_stats(self):
-        """Option 5: View statistics"""
+        """Option 10: View statistics"""
         self.print_header()
         print("📊 EXTRACTION STATISTICS")
         print("-" * 70)
@@ -542,7 +609,7 @@ class WorkflowManager:
         input("\nPress Enter to continue...")
 
     def normalize_data(self):
-        """Option 6: Normalize data"""
+        """Option 11: Normalize data"""
         self.print_header()
         print("🔧 NORMALIZE DATA")
         print("-" * 70)
@@ -585,7 +652,7 @@ class WorkflowManager:
         input("\nPress Enter to continue...")
 
     def reset_workflow(self):
-        """Option 7: Reset workflow"""
+        """Option 12: Reset workflow"""
         self.print_header()
         print("⚠️  RESET WORKFLOW")
         print("-" * 70)
@@ -642,32 +709,36 @@ class WorkflowManager:
 
         print("WORKFLOW OPTIONS:")
         print("-" * 70)
-        print("\n📊 DATA COLLECTION:")
-        print("  1. Scrape Data               - Get car listings with RAW extraction")
-        print("  2. Clean Duplicates          - Remove duplicate review entries")
-        print("  3. Review Disagreements      - Label RAW data for training")
+        print("\n📝 DATA LABELING (Create Training Data):")
+        print("  1. Label New Data            - Manual labeling tool")
+        print("  2. Validate Labels           - Check for labeling errors")
+        print()
+        print("📊 DATA COLLECTION:")
+        print("  3. Scrape Data               - Get car listings with RAW extraction")
+        print("  4. Clean Duplicates          - Remove duplicate review entries")
+        print("  5. Review Disagreements      - Label RAW data for training")
         print()
         print("🎓 MODEL TRAINING & QUALITY:")
-        print("  4. Train Initial Model       - First time training (from scratch)")
-        print("  5. Retrain Model             - Retrain with accumulated data")
-        print("  6. Evaluate Model Quality    - Test model accuracy (F1 score)")
-        print("  7. Check Training Data       - Analyze data quality & distribution")
+        print("  6. Train Initial Model       - First time training (from scratch)")
+        print("  7. Retrain Model             - Retrain with accumulated data")
+        print("  8. Evaluate Model Quality    - Test model accuracy (F1 score)")
+        print("  9. Check Training Data       - Analyze data quality & distribution")
         print()
         print("🔧 TOOLS & UTILITIES:")
-        print("  8. View Statistics           - Check extraction accuracy")
-        print("  9. Normalize Data            - Preview normalization (DB format)")
-        print(" 10. Reset Workflow            - Delete all generated files")
-        print(" 11. View Documentation        - Open WORKFLOW.md")
-        print(" 12. Exit")
+        print(" 10. View Statistics           - Check extraction accuracy")
+        print(" 11. Normalize Data            - Preview normalization (DB format)")
+        print(" 12. Reset Workflow            - Delete all generated files")
+        print(" 13. View Documentation        - Open WORKFLOW.md")
+        print(" 14. Exit")
         print("-" * 70)
         print()
 
-        choice = input("Choose option (1-12): ").strip()
+        choice = input("Choose option (1-14): ").strip()
 
         return choice
 
     def view_documentation(self):
-        """Option 8: View documentation"""
+        """Option 13: View documentation"""
         self.print_header()
         print("📖 DOCUMENTATION")
         print("-" * 70)
@@ -703,34 +774,38 @@ class WorkflowManager:
                 choice = self.show_menu()
 
                 if choice == '1':
-                    self.scrape_data()
+                    self.label_new_data()
                 elif choice == '2':
-                    self.clean_duplicates()
+                    self.validate_labels()
                 elif choice == '3':
-                    self.review_disagreements()
+                    self.scrape_data()
                 elif choice == '4':
-                    self.train_initial_model()
+                    self.clean_duplicates()
                 elif choice == '5':
-                    self.retrain_model()
+                    self.review_disagreements()
                 elif choice == '6':
-                    self.evaluate_model_quality()
+                    self.train_initial_model()
                 elif choice == '7':
-                    self.check_training_data_quality()
+                    self.retrain_model()
                 elif choice == '8':
-                    self.view_stats()
+                    self.evaluate_model_quality()
                 elif choice == '9':
-                    self.normalize_data()
+                    self.check_training_data_quality()
                 elif choice == '10':
-                    self.reset_workflow()
+                    self.view_stats()
                 elif choice == '11':
-                    self.view_documentation()
+                    self.normalize_data()
                 elif choice == '12':
+                    self.reset_workflow()
+                elif choice == '13':
+                    self.view_documentation()
+                elif choice == '14':
                     self.print_header()
                     print("👋 Goodbye!")
                     print()
                     sys.exit(0)
                 else:
-                    print("\n❌ Invalid option. Please choose 1-12.")
+                    print("\n❌ Invalid option. Please choose 1-14.")
                     input("Press Enter to continue...")
 
             except KeyboardInterrupt:
