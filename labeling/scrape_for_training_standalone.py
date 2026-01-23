@@ -33,12 +33,14 @@ RETRY_DELAY = 1
 REQUEST_TIMEOUT = 30
 CHUNK_SIZE = 50
 
-# Pre-compiled regex patterns
-MILEAGE_PATTERN_1 = re.compile(r'(\d{1,3}(?:\s?\d{3})*(?:\.\d+)?)\s?km', re.IGNORECASE)
-MILEAGE_PATTERN_2 = re.compile(r'(\d{1,3}(?:\s?\d{3})*)(?:\.|\s?tis\.?)\s?km', re.IGNORECASE)
-MILEAGE_PATTERN_3 = re.compile(r'(\d{1,3}(?:\s?\d{3})*)(?:\s?xxx\s?km)', re.IGNORECASE)
-POWER_PATTERN = re.compile(r'(\d{1,3})\s?kw', re.IGNORECASE)
-YEAR_PATTERN = re.compile(r'(?:rok výroby|R\.?V\.?|rok|r\.?v\.?|výroba)?\s*(\d{4})\b', re.IGNORECASE)
+# Import centralized regex patterns
+from patterns import (
+    MILEAGE_PATTERN_1,
+    MILEAGE_PATTERN_2,
+    MILEAGE_PATTERN_3,
+    POWER_PATTERN,
+    YEAR_PATTERN
+)
 
 
 # Extraction functions (copied from data_scrap.py)

@@ -17,26 +17,20 @@ import re
 from typing import List, Dict, Tuple, Optional
 from pathlib import Path
 
-
-# Regex patterns - capture WITH units for labeling
-# Mileage patterns (returns value + unit like "200 000 km", "200t km", "85 tis km")
-MILEAGE_PATTERN_1 = re.compile(r'\d{1,3}(?:\s?\d{3})*(?:[.,]\d+)?\s?km', re.IGNORECASE)  # "200 000 km", "200km"
-MILEAGE_PATTERN_2 = re.compile(r'\d{1,3}(?:\s?\d{3})*(?:\s?tis\.?)\s?km', re.IGNORECASE)  # "200 tis km", "85 tis. km"
-MILEAGE_PATTERN_3 = re.compile(r'\d{1,3}(?:\s?\d{3})*\s?xxx\s?km', re.IGNORECASE)  # "200 xxx km", "200xxx"
-MILEAGE_PATTERN_4 = re.compile(r'\d{1,3}(?:[.,]\d+)?\s?t\.?\s?km', re.IGNORECASE)  # "200t km", "1.5t km"
-MILEAGE_PATTERN_5 = re.compile(r'\d{1,3}(?:[.,]\d+)?\s?t(?!d|s|i|e|a)', re.IGNORECASE)  # "200t", "1.5t" (not TDI, TSI, etc)
-MILEAGE_PATTERN_6 = re.compile(r'\d{1,3}(?:\s?\d{3})*\s?tisíc\s?km', re.IGNORECASE)  # "200 tisíc km"
-
-# Power patterns (returns value + unit like "110 kW", "150kW")
-POWER_PATTERN_1 = re.compile(r'\d{1,3}\s?kw', re.IGNORECASE)  # "110 kW", "110kW"
-POWER_PATTERN_2 = re.compile(r'\d{1,3}\s?ps', re.IGNORECASE)  # "150 PS", "150PS"
-POWER_PATTERN_3 = re.compile(r'\d{1,3}\s?koní', re.IGNORECASE)  # "110 koní"
-
-# Year pattern (returns just the 4-digit year like "2016")
-YEAR_PATTERN = re.compile(r'\b(19\d{2}|20[0-2]\d)\b')  # 1900-2029, just the number
-
-# Fuel patterns (returns just the fuel word like "diesel", "TDI", "benzín")
-FUEL_PATTERN = re.compile(r'\b(benzin|benzín|nafta|diesel|dýzl|naftak|turbodiesel|tdi|tsi|hybrid|elektro|electric|lpg|cng|plyn)\b', re.IGNORECASE)
+# Import centralized regex patterns
+from patterns import (
+    MILEAGE_PATTERN_1,
+    MILEAGE_PATTERN_2,
+    MILEAGE_PATTERN_3,
+    MILEAGE_PATTERN_4,
+    MILEAGE_PATTERN_5,
+    MILEAGE_PATTERN_6,
+    POWER_PATTERN_1,
+    POWER_PATTERN_2,
+    POWER_PATTERN_3,
+    YEAR_PATTERN,
+    FUEL_PATTERN
+)
 
 
 class AssistedLabeler:
