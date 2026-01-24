@@ -282,10 +282,9 @@ class ProductionExtractor:
                            key=lambda m: {'high': 3, 'medium': 2, 'low': 1}[m.confidence])
             result['power'] = best_match.value
 
-        # Fuel - normalize to base form
-        # FUEL patterns (FIXED: support adjectives like benzínový, dieselový, naftový)
+        # Fuel - RAW extraction (keep as written in text!)
+        # Match both nouns and adjectives (benzín, benzínový, dieselový, etc.)
         import re
-        # Match both nouns and adjectives (benzín, benzínový, benzínového, etc.)
         fuel_pattern = re.compile(
             r'\b(benzin(?:ový|ového|ovým|ové|ovém)?|benzín(?:ový|ového|ovým|ové|ovém)?|'
             r'nafta|naftový(?:ho|mu|m|ém)?|diesel(?:ový|ového|ovým|ové)?|'
@@ -294,18 +293,8 @@ class ProductionExtractor:
         )
         fuel_match = fuel_pattern.search(text)
         if fuel_match:
-            fuel = fuel_match.group(1).lower()
-            # Normalize (strip adjective endings)
-            fuel_base = fuel.split('ový')[0].split('ového')[0].split('ovým')[0].split('ové')[0].split('ovém')[0]
-
-            # Diesel variants
-            if any(x in fuel_base for x in ['diesel', 'nafta', 'tdi', 'turbodiesel', 'dýzl', 'naftak', 'naftový']):
-                result['fuel'] = 'diesel'
-            # Benzín variants
-            elif any(x in fuel_base for x in ['benzin', 'benzín', 'tsi']):
-                result['fuel'] = 'benzín'
-            else:
-                result['fuel'] = fuel_base if fuel_base else fuel
+            # Store RAW matched text (preserve variations like "dieselový", "benzínový")
+            result['fuel'] = fuel_match.group(1)
 
         return result
 

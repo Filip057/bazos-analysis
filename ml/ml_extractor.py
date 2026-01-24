@@ -156,16 +156,16 @@ class CarDataExtractor:
             'fuel': None
         }
 
-        # Extract entities found by the model
+        # Extract entities found by the model (RAW - as written in text!)
         for ent in doc.ents:
             if ent.label_ == "MILEAGE":
-                result['mileage'] = self._parse_mileage(ent.text)
+                result['mileage'] = ent.text  # RAW: "187.000 km", not 187000
             elif ent.label_ == "YEAR":
-                result['year'] = self._parse_year(ent.text)
+                result['year'] = ent.text  # RAW: "2015", not parsed
             elif ent.label_ == "POWER":
-                result['power'] = self._parse_power(ent.text)
+                result['power'] = ent.text  # RAW: "145 KW", not 145
             elif ent.label_ == "FUEL":
-                result['fuel'] = ent.text.lower()
+                result['fuel'] = ent.text  # RAW: "dieselový", not lowercased
 
         logger.debug(f"Extracted from '{text[:50]}...': {result}")
         return result
