@@ -260,27 +260,27 @@ class ProductionExtractor:
             'fuel': None
         }
 
-        # Mileage
+        # Mileage - RAW text with units (e.g., "157000 km", "150 tis km")
         mileage_matches = self.regex_patterns.find_mileage(text)
         if mileage_matches:
             # Take highest confidence match
             best_match = max(mileage_matches,
                            key=lambda m: {'high': 3, 'medium': 2, 'low': 1}[m.confidence])
-            result['mileage'] = best_match.value
+            result['mileage'] = best_match.text  # RAW: "157000 km" not 157000
 
-        # Year
+        # Year - RAW text (e.g., "2015")
         year_matches = self.regex_patterns.find_years(text)
         if year_matches:
             best_match = max(year_matches,
                            key=lambda m: {'high': 3, 'medium': 2, 'low': 1}[m.confidence])
-            result['year'] = best_match.value
+            result['year'] = best_match.text  # RAW: "2015" not parsed
 
-        # Power
+        # Power - RAW text with units (e.g., "145 kW", "62kw")
         power_matches = self.regex_patterns.find_power(text)
         if power_matches:
             best_match = max(power_matches,
                            key=lambda m: {'high': 3, 'medium': 2, 'low': 1}[m.confidence])
-            result['power'] = best_match.value
+            result['power'] = best_match.text  # RAW: "145 kW" not 145
 
         # Fuel - RAW extraction (keep as written in text!)
         # Match both nouns and adjectives (benzín, benzínový, dieselový, etc.)
