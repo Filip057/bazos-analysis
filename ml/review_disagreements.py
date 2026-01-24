@@ -15,6 +15,36 @@ import json
 from pathlib import Path
 from typing import List, Dict
 from datetime import datetime
+import re
+
+
+def parse_user_input(user_input: str, field: str):
+    """
+    Parse user input and extract the RAW value as it should appear in text.
+
+    Handles inputs like:
+    - "99000" → "99000"
+    - "99 000 km" → "99 000 km" (keep RAW format)
+    - "145 KW" → "145 KW" (keep RAW format)
+    - "dieselový" → "dieselový" (keep RAW format)
+
+    Args:
+        user_input: The raw user input string
+        field: The field type (mileage, year, power, fuel)
+
+    Returns:
+        The value in RAW format as it would appear in text
+    """
+    user_input = user_input.strip()
+
+    # For fuel, just return as-is (it's text)
+    if field == 'fuel':
+        return user_input
+
+    # For numeric fields (mileage, year, power):
+    # Accept the input AS-IS (user types what they see in the text)
+    # This preserves formatting like "99 000 km", "145 KW", etc.
+    return user_input
 
 
 class DisagreementReviewer:
@@ -124,16 +154,11 @@ class DisagreementReviewer:
                             print(f"  ✓ Neither - field is empty")
                             break
                         else:
-                            # Custom value
-                            try:
-                                if field in ['mileage', 'year', 'power']:
-                                    corrected_result[field] = int(choice)
-                                else:
-                                    corrected_result[field] = choice
-                                print(f"  ✓ Using custom value: {choice}")
-                                break
-                            except ValueError:
-                                print(f"  ❌ Invalid input. Try again.")
+                            # Custom value - parse and accept as RAW
+                            parsed_value = parse_user_input(choice, field)
+                            corrected_result[field] = parsed_value
+                            print(f"  ✓ Using custom value: {parsed_value}")
+                            break
 
                     if skip_this_case:
                         break
@@ -163,15 +188,10 @@ class DisagreementReviewer:
                         corrected_result[field] = None
                         print(f"  ✓ Rejected - field is empty")
                     else:
-                        try:
-                            if field in ['mileage', 'year', 'power']:
-                                corrected_result[field] = int(choice)
-                            else:
-                                corrected_result[field] = choice
-                            print(f"  ✓ Using custom value: {choice}")
-                        except ValueError:
-                            corrected_result[field] = ml_value
-                            print(f"  ⚠️  Invalid input, keeping ML value")
+                        # Custom value - parse and accept as RAW
+                        parsed_value = parse_user_input(choice, field)
+                        corrected_result[field] = parsed_value
+                        print(f"  ✓ Using custom value: {parsed_value}")
 
                     if skip_this_case:
                         break
@@ -201,15 +221,10 @@ class DisagreementReviewer:
                         corrected_result[field] = None
                         print(f"  ✓ Rejected - field is empty")
                     else:
-                        try:
-                            if field in ['mileage', 'year', 'power']:
-                                corrected_result[field] = int(choice)
-                            else:
-                                corrected_result[field] = choice
-                            print(f"  ✓ Using custom value: {choice}")
-                        except ValueError:
-                            corrected_result[field] = regex_value
-                            print(f"  ⚠️  Invalid input, keeping Regex value")
+                        # Custom value - parse and accept as RAW
+                        parsed_value = parse_user_input(choice, field)
+                        corrected_result[field] = parsed_value
+                        print(f"  ✓ Using custom value: {parsed_value}")
 
                     if skip_this_case:
                         break
