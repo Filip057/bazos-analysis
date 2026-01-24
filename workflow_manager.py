@@ -329,7 +329,7 @@ class WorkflowManager:
         print()
 
         self.run_command(
-            f'python3 -m labeling.validate_labels "{training_file}"',
+            f'python3 labeling/validate_labels.py "{training_file}"',
             "Validating labeled data"
         )
 
