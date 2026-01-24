@@ -50,6 +50,9 @@ class ContextAwarePatterns:
         re.compile(r'(?:servis|serviska|oprava|výměna|vyměněn)\s+(\d{4})', re.IGNORECASE),  # "servis 2023"
         re.compile(r'(?:pneumatiky|pneu|kola|brzdy|motor|převodovka)\s+(?:z|z\s+roku)?\s*(\d{4})', re.IGNORECASE),  # "pneumatiky 2024"
         re.compile(r'nové?\s+(?:od|z)\s+(\d{4})', re.IGNORECASE),  # "nové od 2023"
+        # NEW: Exclude service/repair dates (rozvody 2024, brzdy 2025, etc.)
+        re.compile(r'(?:rozvody|rozvodový|řemen|řemeny|brzdy|brzdové|destičky|kotouče|olej|filtr|filtry)\s+(?:dělané?|dělaný|vyměněné?|vyměněn[yoa]?|při|z|ze)\s*(\d{4})', re.IGNORECASE),
+        re.compile(r'(?:dělané?|vyměněné?|vyměněn[yoa]?|oprava|opraveno)\s+(?:při|v|ve|z)?\s*(\d{4})', re.IGNORECASE),  # "dělány 2023", "vyměněny 2023"
     ]
 
     # LOW confidence - standalone year (last resort)
@@ -72,10 +75,13 @@ class ContextAwarePatterns:
         re.compile(r'\b((\d{1,3}(?:[\s.]?\d{3})*)\s?xxx\s?km)', re.IGNORECASE),  # "150 xxx km"
     ]
 
-    # EXCLUDE mileage patterns (daily mileage, range, etc.)
+    # EXCLUDE mileage patterns (daily mileage, range, service records, etc.)
     MILEAGE_EXCLUDE = [
         re.compile(r'(?:dojezd|dosah|range)\s+(\d+)\s?km', re.IGNORECASE),  # "dojezd 400 km" (electric car range)
         re.compile(r'(\d+)\s?km\s+(?:denně|měsíčně|ročně)', re.IGNORECASE),  # "50 km denně"
+        # NEW: Exclude service-related mileage (servis při xxx km, rozvody při xxx km)
+        re.compile(r'(?:servis|serviska|poslední\s+servis|oprava|výměna|vyměněn|dělané?)\s+(?:při|v|ve|na)?\s*[:.]?\s*(\d{1,3}(?:[\s.]?\d{3})*)\s?km', re.IGNORECASE),
+        re.compile(r'(?:rozvody|rozvodový|řemen|brzdy|olej|filtr|filtry)\s+(?:při|dělané?|vyměněné?)\s+(\d{1,3}(?:[\s.]?\d{3})*)\s?km', re.IGNORECASE),
     ]
 
     # POWER PATTERNS - ONLY kW (FIXED: exclude HP/PS/koně)
