@@ -60,16 +60,16 @@ class ContextAwarePatterns:
     # MILEAGE PATTERNS - Context-aware (FIXED: support dots as separators)
 
     MILEAGE_HIGH_CONFIDENCE = [
-        re.compile(r'(?:najeto|nájezd|km\s+celkem|počet\s+km)\s*[:.]?\s*(\d{1,3}(?:[\s.]?\d{3})*)\s?km', re.IGNORECASE),
-        re.compile(r'(\d{1,3}(?:[\s.]?\d{3})*)\s?km\s+(?:najeto|celkem)', re.IGNORECASE),
-        re.compile(r'(?:najeto|nájezd)\s*[:.]?\s*(\d{1,3})\s?(?:tis|tisíc|t)\.?\s?km', re.IGNORECASE),  # "najeto 150 tis km"
+        re.compile(r'(?:najeto|nájezd|km\s+celkem|počet\s+km)\s*[:.]?\s*((\d{1,3}(?:[\s.]?\d{3})*)\s?km)', re.IGNORECASE),
+        re.compile(r'((\d{1,3}(?:[\s.]?\d{3})*)\s?km)\s+(?:najeto|celkem)', re.IGNORECASE),
+        re.compile(r'(?:najeto|nájezd)\s*[:.]?\s*((\d{1,3})\s?(?:tis|tisíc|t)\.?\s?km)', re.IGNORECASE),  # "najeto 150 tis km"
     ]
 
     MILEAGE_MEDIUM_CONFIDENCE = [
-        re.compile(r'\b(\d{1,3}(?:[\s.]?\d{3})*)\s?km\b', re.IGNORECASE),  # "150000 km", "150 000 km", "150.000 km"
-        re.compile(r'\b(\d{1,3})\s?(?:tis|tisíc)\.?\s?km', re.IGNORECASE),  # "150 tis km"
-        re.compile(r'\b(\d{1,3})\s?t(?!d|s|i|e)\s?km', re.IGNORECASE),  # "150t km" (not TDI)
-        re.compile(r'\b(\d{1,3}(?:[\s.]?\d{3})*)\s?xxx\s?km', re.IGNORECASE),  # "150 xxx km"
+        re.compile(r'\b((\d{1,3}(?:[\s.]?\d{3})*)\s?km)\b', re.IGNORECASE),  # "150000 km", "150 000 km", "150.000 km"
+        re.compile(r'\b((\d{1,3})\s?(?:tis|tisíc)\.?\s?km)', re.IGNORECASE),  # "150 tis km"
+        re.compile(r'\b((\d{1,3})\s?t(?!d|s|i|e)\s?km)', re.IGNORECASE),  # "150t km" (not TDI)
+        re.compile(r'\b((\d{1,3}(?:[\s.]?\d{3})*)\s?xxx\s?km)', re.IGNORECASE),  # "150 xxx km"
     ]
 
     # EXCLUDE mileage patterns (daily mileage, range, etc.)
@@ -81,12 +81,12 @@ class ContextAwarePatterns:
     # POWER PATTERNS - ONLY kW (FIXED: exclude HP/PS/koně)
 
     POWER_HIGH_CONFIDENCE = [
-        re.compile(r'(?:výkon|power|motor)\s*[:.]?\s*(\d{1,3})\s?kw', re.IGNORECASE),
-        re.compile(r'(\d{1,3})\s?kw\s+(?:výkon|motor)', re.IGNORECASE),
+        re.compile(r'(?:výkon|power|motor)\s*[:.]?\s*((\d{1,3})\s?kw)', re.IGNORECASE),
+        re.compile(r'((\d{1,3})\s?kw)\s+(?:výkon|motor)', re.IGNORECASE),
     ]
 
     POWER_MEDIUM_CONFIDENCE = [
-        re.compile(r'\b(\d{1,3})\s?kw\b', re.IGNORECASE),  # Only kW!
+        re.compile(r'\b((\d{1,3})\s?kw)\b', re.IGNORECASE),  # Only kW!
     ]
 
     # EXCLUDE power in HP/PS/koně (different unit, would need conversion)
@@ -166,12 +166,12 @@ class ContextAwarePatterns:
         for pattern in self.MILEAGE_HIGH_CONFIDENCE:
             for match in pattern.finditer(text):
                 if match.start(1) not in excluded_positions:
-                    value = self._parse_mileage(match.group(1), text[match.start():match.end()])
+                    value = self._parse_mileage(match.group(2), match.group(1))
                     matches.append(Match(
-                        text=match.group(0),
+                        text=match.group(1),  # Capture just "160.373 km", not "najeto: 160.373 km"
                         value=value,
-                        start=match.start(),
-                        end=match.end(),
+                        start=match.start(1),
+                        end=match.end(1),
                         confidence='high',
                         pattern_type='mileage_context'
                     ))
@@ -180,13 +180,13 @@ class ContextAwarePatterns:
         if not matches:
             for pattern in self.MILEAGE_MEDIUM_CONFIDENCE:
                 for match in pattern.finditer(text):
-                    if match.start() not in excluded_positions:
-                        value = self._parse_mileage(match.group(1), match.group(0))
+                    if match.start(1) not in excluded_positions:
+                        value = self._parse_mileage(match.group(2), match.group(1))
                         matches.append(Match(
-                            text=match.group(0),
+                            text=match.group(1),  # Just "160.373 km"
                             value=value,
-                            start=match.start(),
-                            end=match.end(),
+                            start=match.start(1),
+                            end=match.end(1),
                             confidence='medium',
                             pattern_type='standard'
                         ))
@@ -200,13 +200,13 @@ class ContextAwarePatterns:
         # HIGH confidence
         for pattern in self.POWER_HIGH_CONFIDENCE:
             for match in pattern.finditer(text):
-                value = int(re.sub(r'\D', '', match.group(1)))
+                value = int(re.sub(r'\D', '', match.group(2)))
                 if 30 <= value <= 500:  # Reasonable power range
                     matches.append(Match(
-                        text=match.group(0),
+                        text=match.group(1),  # Just "88 kw", not "Výkon 88 kw"
                         value=value,
-                        start=match.start(),
-                        end=match.end(),
+                        start=match.start(1),
+                        end=match.end(1),
                         confidence='high',
                         pattern_type='power_context'
                     ))
@@ -215,13 +215,13 @@ class ContextAwarePatterns:
         if not matches:
             for pattern in self.POWER_MEDIUM_CONFIDENCE:
                 for match in pattern.finditer(text):
-                    value = int(re.sub(r'\D', '', match.group(1)))
+                    value = int(re.sub(r'\D', '', match.group(2)))
                     if 30 <= value <= 500:
                         matches.append(Match(
-                            text=match.group(0),
+                            text=match.group(1),  # Just "88 kw"
                             value=value,
-                            start=match.start(),
-                            end=match.end(),
+                            start=match.start(1),
+                            end=match.end(1),
                             confidence='medium',
                             pattern_type='standard'
                         ))

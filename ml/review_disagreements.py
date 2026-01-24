@@ -263,41 +263,40 @@ class DisagreementReviewer:
         print(f"{'='*80}\n")
 
     def _create_entities(self, text: str, result: Dict) -> List:
-        """Create entity annotations from result (simplified)"""
+        """Create entity annotations from result - works with RAW values"""
         entities = []
         import re
 
-        # Find mileage
+        # Find mileage (RAW value like "160.373 km", "150 tis km")
         if result.get('mileage'):
-            patterns = [
-                rf"{result['mileage']}\s?km",
-                rf"{result['mileage']//1000}\s?(?:tis|t)\s?km"
-            ]
-            for pattern in patterns:
-                match = re.search(pattern, text, re.IGNORECASE)
-                if match:
-                    entities.append((match.start(), match.end(), 'MILEAGE'))
-                    break
+            # Escape special regex chars in the RAW value
+            mileage_escaped = re.escape(result['mileage'])
+            # Try exact match first
+            match = re.search(mileage_escaped, text, re.IGNORECASE)
+            if match:
+                entities.append((match.start(), match.end(), 'MILEAGE'))
 
-        # Find year
+        # Find year (RAW value like "2015")
         if result.get('year'):
             year_str = str(result['year'])
             pos = text.find(year_str)
             if pos != -1:
-                entities.append((pos, pos + 4, 'YEAR'))
+                entities.append((pos, pos + len(year_str), 'YEAR'))
 
-        # Find power
+        # Find power (RAW value like "88 kw", "145 KW")
         if result.get('power'):
-            pattern = rf"{result['power']}\s?(?:kw|ps|koní)"
-            match = re.search(pattern, text, re.IGNORECASE)
+            # Escape special regex chars in the RAW value
+            power_escaped = re.escape(result['power'])
+            match = re.search(power_escaped, text, re.IGNORECASE)
             if match:
                 entities.append((match.start(), match.end(), 'POWER'))
 
-        # Find fuel
+        # Find fuel (RAW value like "dieselový", "BENZIN")
         if result.get('fuel'):
-            pos = text.lower().find(result['fuel'].lower())
-            if pos != -1:
-                entities.append((pos, pos + len(result['fuel']), 'FUEL'))
+            fuel_escaped = re.escape(result['fuel'])
+            match = re.search(fuel_escaped, text, re.IGNORECASE)
+            if match:
+                entities.append((match.start(), match.end(), 'FUEL'))
 
         return entities
 
