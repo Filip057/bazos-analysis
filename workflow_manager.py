@@ -342,23 +342,59 @@ class WorkflowManager:
         print("This will scrape car listings from Bazos.cz and extract data using")
         print("ML + Regex (RAW values - no normalization).")
         print()
+        print("Available brands:")
+        print("  alfa, audi, bmw, citroen, dacia, fiat, ford, honda, hyundai,")
+        print("  chevrolet, kia, mazda, mercedes, mitsubishi, nissan, opel,")
+        print("  peugeot, renault, seat, suzuki, skoda, toyota, volkswagen, volvo")
+        print()
         print("Options:")
-        print("  1. Scrape WITHOUT database (--skip-db) [Recommended for testing]")
-        print("  2. Scrape WITH database")
+        print("  1. Scrape specific brand(s)")
+        print("  2. Scrape ALL brands")
         print("  3. Back to main menu")
         print()
 
         choice = input("Choose option (1-3): ").strip()
 
         if choice == '1':
+            brands = input("\nEnter brand(s) (space-separated, e.g., 'skoda toyota'): ").strip()
+            if not brands:
+                print("❌ No brands specified!")
+                input("\nPress Enter to continue...")
+                return
+
+            print()
+            print("Database options:")
+            print("  1. Skip database (testing mode)")
+            print("  2. Save to database")
+            db_choice = input("Choose (1-2): ").strip()
+
+            skip_db = "--skip-db" if db_choice == '1' else ""
+
             self.run_command(
-                "python3 -m scraper.data_scrap --skip-db",
-                "Scraping data (without database)"
+                f"python3 -m scraper.data_scrap --brands {brands} {skip_db}",
+                f"Scraping {brands}"
             )
+
         elif choice == '2':
+            print()
+            print("⚠️  WARNING: Scraping ALL brands may take a long time!")
+            print()
+            print("Database options:")
+            print("  1. Skip database (testing mode)")
+            print("  2. Save to database")
+            db_choice = input("Choose (1-2): ").strip()
+
+            confirm = input("\nProceed with scraping all brands? (yes/no): ").strip().lower()
+            if confirm != 'yes':
+                print("❌ Cancelled")
+                input("\nPress Enter to continue...")
+                return
+
+            skip_db = "--skip-db" if db_choice == '1' else ""
+
             self.run_command(
-                "python3 -m scraper.data_scrap",
-                "Scraping data (with database)"
+                f"python3 -m scraper.data_scrap {skip_db}",
+                "Scraping ALL brands"
             )
         else:
             return

@@ -268,11 +268,12 @@ async def process_data(brand: str, url: str, description: str, heading: str, pri
 
 
 # all together
-async def main(skip_db=False):
+async def main(skip_db=False, brands=None):
     """Main scraping orchestrator with ML extraction and connection pooling
 
     Args:
         skip_db: If True, skip database saving (useful for testing without MySQL)
+        brands: List of brand names to scrape, or None to scrape all brands
     """
     # Initialize production extractor (ML + context-aware regex)
     logger.info("Initializing ML + Regex extraction system...")
@@ -291,10 +292,26 @@ async def main(skip_db=False):
         logger.info("Starting scraping process...")
         logger.info("="*60)
 
-        # Step 1: Get car brands URLs (uncomment to scrape all brands)
-        # brand_urls = await get_brand_urls(session, semaphore)
-        # For testing, use a single brand:
-        brand_urls = [('chevrolet', 'https://auto.bazos.cz/chevrolet/')]
+        # Step 1: Get car brands URLs based on user input
+        if brands:
+            # User specified specific brands
+            brand_urls = []
+            for brand in brands:
+                brand_lower = brand.lower()
+                if brand_lower in CAR_BRANDS:
+                    brand_urls.append((brand_lower, f'https://auto.bazos.cz/{brand_lower}/'))
+                else:
+                    logger.warning(f"⚠️  Unknown brand: {brand} (skipping)")
+
+            if not brand_urls:
+                logger.error("❌ No valid brands specified. Available brands:")
+                logger.error(f"   {', '.join(CAR_BRANDS)}")
+                return
+        else:
+            # Scrape all brands
+            logger.info("No brands specified, scraping ALL brands...")
+            brand_urls = await get_brand_urls(session, semaphore)
+
         logger.info(f"Target brands: {', '.join([b[0] for b in brand_urls])}")
 
         # Step 2: Get all pages for each brand IN PARALLEL
@@ -332,26 +349,59 @@ async def main(skip_db=False):
             await fetch_data_into_database(data=processed_data)
             logger.info(f"✓ Successfully saved {len(processed_data)} cars to database")
 
-async def run(skip_db=False):
-    await main(skip_db=skip_db)
+async def run(skip_db=False, brands=None):
+    await main(skip_db=skip_db, brands=brands)
 
 
 if __name__ == "__main__":
     import sys
+    import argparse
 
-    # Check for --skip-db flag
-    skip_db = "--skip-db" in sys.argv
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(
+        description='Scrape car listings from Bazos.cz with ML extraction',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Scrape Chevrolet only
+  python3 -m scraper.data_scrap --brands chevrolet
+
+  # Scrape multiple brands
+  python3 -m scraper.data_scrap --brands skoda toyota volkswagen
+
+  # Scrape all brands
+  python3 -m scraper.data_scrap
+
+  # Scrape without database (testing)
+  python3 -m scraper.data_scrap --brands chevrolet --skip-db
+
+Available brands:
+  alfa, audi, bmw, citroen, dacia, fiat, ford, honda, hyundai,
+  chevrolet, kia, mazda, mercedes, mitsubishi, nissan, opel,
+  peugeot, renault, seat, suzuki, skoda, toyota, volkswagen, volvo
+        """
+    )
+    parser.add_argument('--brands', nargs='+', help='Specific brands to scrape (space-separated)')
+    parser.add_argument('--skip-db', action='store_true', help='Skip database saving (test mode)')
+
+    args = parser.parse_args()
 
     start_time = time.time()
     logger.info("=" * 60)
     logger.info("BAZOS CAR SCRAPER - OPTIMIZED VERSION")
     logger.info("=" * 60)
 
-    if skip_db:
+    if args.skip_db:
         logger.info("🔧 Running in TEST MODE (database saving disabled)")
-        logger.info("=" * 60)
 
-    asyncio.run(run(skip_db=skip_db))
+    if args.brands:
+        logger.info(f"🎯 Target brands: {', '.join(args.brands)}")
+    else:
+        logger.info("🌐 Scraping ALL brands")
+
+    logger.info("=" * 60)
+
+    asyncio.run(run(skip_db=args.skip_db, brands=args.brands))
     end_time = time.time()
     elapsed = end_time - start_time
     logger.info("\n" + "=" * 60)
