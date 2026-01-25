@@ -25,19 +25,57 @@ from ml.context_aware_patterns import ContextAwarePatterns
 # MILEAGE PATTERNS
 # ============================================================================
 # These patterns match mileage values with various formats:
-# - "200 000 km", "200km", "200.000 km"
-# - "200 tis km", "85 tis. km"
-# - "200 xxx km", "200xxx"
-# - "200t km", "1.5t km"
-# - "200 tisíc km"
+#
+# Standard formats:
+# - "200 000 km", "200km", "200.000 km", "200_000 km"
+# - "200000" (no separator, no km)
+# - "200 000", "200.000" (separator but no km)
+#
+# Thousands abbreviations (tis/tisíc):
+# - "200 tis km", "200tis", "200 tis.", "200 tis. km"
+# - "200 tisíc km", "200tisíc"
+#
+# Thousands abbreviations (k):
+# - "200k", "200 k", "200k km", "200 k km"
+#
+# Thousands abbreviations (t):
+# - "200t km", "200 t", "1.5t km" (not TDI, TSI, etc.)
+#
+# Placeholder formats (xxx, ***):
+# - "200xxx", "200 xxx", "200xxx km", "200 xxx km"
+# - "200***", "200 ***", "200*** km", "200 *** km"
+#
+# With prefix:
+# - "najeto 200 000", "najeto 200tis", "najeto200k"
 
 MILEAGE_PATTERNS = [
-    re.compile(r'\d{1,3}(?:\s?\d{3})*(?:[.,]\d+)?\s?km', re.IGNORECASE),  # "200 000 km", "200km"
-    re.compile(r'\d{1,3}(?:\s?\d{3})*(?:\s?tis\.?)\s?km', re.IGNORECASE),  # "200 tis km"
-    re.compile(r'\d{1,3}(?:\s?\d{3})*\s?xxx\s?km', re.IGNORECASE),  # "200 xxx km"
+    # Standard formats with km
+    re.compile(r'\d{1,3}(?:[\s._]?\d{3})+(?:[.,]\d+)?\s?km', re.IGNORECASE),  # "200 000 km", "200.000km", "200_000 km"
+    re.compile(r'\d{1,3}(?:[.,]\d+)?\s?km', re.IGNORECASE),  # "200km", "1.5km"
+
+    # Thousands abbreviations with "tis" or "tisíc"
+    re.compile(r'\d{1,3}(?:[.,]\d+)?\s?tis\.?\s?km', re.IGNORECASE),  # "200 tis km", "200tis. km"
+    re.compile(r'\d{1,3}(?:[.,]\d+)?\s?tis\.?(?!\w)', re.IGNORECASE),  # "200tis", "200 tis." (not followed by word chars)
+    re.compile(r'\d{1,3}(?:[.,]\d+)?\s?tisíc\s?km', re.IGNORECASE),  # "200 tisíc km"
+    re.compile(r'\d{1,3}(?:[.,]\d+)?\s?tisíc(?!\w)', re.IGNORECASE),  # "200tisíc"
+
+    # Thousands abbreviations with "k"
+    re.compile(r'\d{1,3}(?:[.,]\d+)?\s?k\s?km', re.IGNORECASE),  # "200k km", "200 k km"
+    re.compile(r'\d{1,3}(?:[.,]\d+)?k(?!w|m|\w)', re.IGNORECASE),  # "200k", "150k" (not kW, km, or other word)
+
+    # Thousands abbreviations with "t"
     re.compile(r'\d{1,3}(?:[.,]\d+)?\s?t\.?\s?km', re.IGNORECASE),  # "200t km", "1.5t km"
-    re.compile(r'\d{1,3}(?:[.,]\d+)?\s?t(?!d|s|i|e|a)', re.IGNORECASE),  # "200t" (not TDI, TSI)
-    re.compile(r'\d{1,3}(?:\s?\d{3})*\s?tisíc\s?km', re.IGNORECASE),  # "200 tisíc km"
+    re.compile(r'\d{1,3}(?:[.,]\d+)?\s?t(?!d|s|i|e|a|\w)', re.IGNORECASE),  # "200t" (not TDI, TSI, etc.)
+
+    # Placeholder formats (xxx, ***)
+    re.compile(r'\d{1,3}\s?xxx\s?km', re.IGNORECASE),  # "200 xxx km", "200xxx km"
+    re.compile(r'\d{1,3}\s?xxx(?!\w)', re.IGNORECASE),  # "200xxx", "200 xxx"
+    re.compile(r'\d{1,3}\s?\*{3}\s?km', re.IGNORECASE),  # "200 *** km", "200*** km"
+    re.compile(r'\d{1,3}\s?\*{3}(?!\w)', re.IGNORECASE),  # "200***", "200 ***"
+
+    # Standard formats WITHOUT km (must have separator or be 5-6 digits)
+    re.compile(r'\d{1,3}[\s._]\d{3}(?:[\s._]\d{3})?(?!\s?k[mw])', re.IGNORECASE),  # "200 000", "200.000" (not followed by km/kw)
+    re.compile(r'\b\d{5,6}(?!\s?k[mw]|\d)', re.IGNORECASE),  # "200000", "150000" (5-6 digits, not followed by km/kw)
 ]
 
 # For compatibility with existing code
