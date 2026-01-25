@@ -341,6 +341,30 @@ class CarDataExtractor:
         match = re.search(r'(\d+)', text)
         return int(match.group(1)) if match else None
 
+    def save_model(self, output_dir: str):
+        """
+        Save the trained model to disk.
+
+        Args:
+            output_dir: Directory path where the model should be saved
+        """
+        if not self.nlp:
+            raise ValueError("No model to save. Train or load a model first.")
+
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        self.nlp.to_disk(output_path)
+
+        # Save metadata if NER pipeline exists
+        if "ner" in self.nlp.pipe_names:
+            ner = self.nlp.get_pipe("ner")
+            with open(output_path / "metadata.json", "w") as f:
+                json.dump({
+                    "labels": list(ner.labels)
+                }, f, indent=2)
+
+        logger.info(f"✓ Model saved to {output_dir}")
+
     def evaluate(self, test_data: List[Tuple[str, Dict]]) -> Dict:
         """
         Evaluate model performance on test data.
