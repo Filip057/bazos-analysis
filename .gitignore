@@ -37,6 +37,7 @@ extraction_stats.json
 review_queue.json
 manual_review_data.json
 training_queue.json
+error_analysis_report.json
 
 # Trained models (optional - comment out if you want to commit models)
 car_ner_model/
