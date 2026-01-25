@@ -28,6 +28,7 @@ from collections import Counter
 
 from ml.ml_extractor import CarDataExtractor
 from ml.context_aware_patterns import ContextAwarePatterns
+from ml.power_resolver import resolve_power
 
 
 class DataNormalizer:
@@ -191,7 +192,8 @@ class ProductionExtractor:
                 'fuel': str or None,
                 'confidence': 'high' | 'medium' | 'low',
                 'agreement': True/False,
-                'flagged_for_review': True/False
+                'flagged_for_review': True/False,
+                'power_resolution': PowerResolution object with detailed metadata
             }
         """
         self.stats['total_extractions'] += 1
@@ -202,19 +204,34 @@ class ProductionExtractor:
         # 2. Context-aware regex extraction (RAW - keep as-is from text)
         regex_result_raw = self._extract_with_regex(text)
 
-        # 3. Compare RAW results (exact match only!)
+        # 3. POWER RESOLUTION - Use advanced resolution system for power
+        power_resolution = resolve_power(
+            ml_raw=ml_result_raw.get('power'),
+            regex_raw=regex_result_raw.get('power'),
+            prefer_ml=False  # Prefer regex by default (more conservative)
+        )
+
+        # 3b. Update raw results with resolved power value
+        ml_result_raw_with_resolved_power = ml_result_raw.copy()
+        regex_result_raw_with_resolved_power = regex_result_raw.copy()
+        # Keep originals, but add resolved power for comparison
+        final_power_raw = power_resolution.resolved_value
+
+        # 4. Compare RAW results (exact match only!)
         #    "dieselový" != "diesel" → disagreement (you want to see this!)
         #    "145 KW" != "145" → disagreement (you want to see this!)
-        comparison = self._compare_results(ml_result_raw, regex_result_raw)
+        #    For power, use the power_resolution metadata
+        comparison = self._compare_results(ml_result_raw, regex_result_raw, power_resolution)
 
-        # 4. Make decision based on RAW comparison
+        # 5. Make decision based on RAW comparison
         final_result_raw, confidence = self._decide_final_result(
             ml_result_raw,
             regex_result_raw,
-            comparison
+            comparison,
+            power_resolution
         )
 
-        # 5. Handle based on agreement level (save RAW data!)
+        # 6. Handle based on agreement level (save RAW data!)
         if comparison['agreement_level'] == 'full':
             # High confidence - auto-add to training data (RAW)
             self._add_to_auto_training(text, final_result_raw, car_id)
@@ -230,15 +247,15 @@ class ProductionExtractor:
             self._add_to_review_queue(text, ml_result_raw, regex_result_raw, car_id, comparison)
             self.stats['disagreements'] += 1
 
-        # 6. Update field statistics
+        # 7. Update field statistics
         self._update_field_stats(comparison)
 
-        # 7. Normalize ONLY for database (separate step)
+        # 8. Normalize ONLY for database (separate step)
         #    Training data uses RAW, database uses normalized
         normalizer = DataNormalizer()
         final_result_normalized = self._normalize_result(final_result_raw, normalizer)
 
-        # 8. Prepare response (normalized for DB, RAW for training)
+        # 9. Prepare response (normalized for DB, RAW for training, power resolution metadata)
         response = {
             **final_result_normalized,  # Normalized for database
             'confidence': confidence,
@@ -246,7 +263,9 @@ class ProductionExtractor:
             'flagged_for_review': comparison['agreement_level'] == 'none',
             'car_id': car_id,
             # Keep raw values for debugging/training
-            'raw_values': final_result_raw
+            'raw_values': final_result_raw,
+            # Add power resolution metadata
+            'power_resolution': power_resolution.to_dict()
         }
 
         return response
@@ -307,21 +326,44 @@ class ProductionExtractor:
             'fuel': normalizer.normalize_fuel(result.get('fuel'))
         }
 
-    def _compare_results(self, ml_result: Dict, regex_result: Dict) -> Dict:
-        """Compare ML and regex results field by field"""
+    def _compare_results(self, ml_result: Dict, regex_result: Dict, power_resolution=None) -> Dict:
+        """
+        Compare ML and regex results field by field
+
+        Args:
+            ml_result: Raw ML extraction results
+            regex_result: Raw regex extraction results
+            power_resolution: PowerResolution object for intelligent power comparison
+        """
         comparison = {
             'agreements': [],
             'disagreements': [],
             'ml_only': [],
             'regex_only': [],
             'both_empty': [],
-            'agreement_level': None
+            'agreement_level': None,
+            'power_disagreement_type': None  # Track power disagreement type
         }
 
         for field in ['mileage', 'year', 'power', 'fuel']:
             ml_val = ml_result.get(field)
             regex_val = regex_result.get(field)
 
+            # Special handling for power using power_resolution
+            if field == 'power' and power_resolution is not None:
+                # Use the power resolver's disagreement classification
+                if power_resolution.disagreement_type == "NONE":
+                    comparison['agreements'].append(field)
+                elif power_resolution.disagreement_type == "MINOR_FORMATTING":
+                    # Minor formatting difference - count as agreement for overall confidence
+                    comparison['agreements'].append(field)
+                else:  # MAJOR disagreement
+                    comparison['disagreements'].append(field)
+
+                comparison['power_disagreement_type'] = power_resolution.disagreement_type
+                continue
+
+            # Standard comparison for other fields
             if ml_val is not None and regex_val is not None:
                 if ml_val == regex_val:
                     comparison['agreements'].append(field)
@@ -348,11 +390,32 @@ class ProductionExtractor:
         return comparison
 
     def _decide_final_result(self, ml_result: Dict, regex_result: Dict,
-                            comparison: Dict) -> tuple:
-        """Decide final values based on comparison"""
+                            comparison: Dict, power_resolution=None) -> tuple:
+        """
+        Decide final values based on comparison
+
+        Args:
+            ml_result: Raw ML extraction results
+            regex_result: Raw regex extraction results
+            comparison: Comparison results
+            power_resolution: PowerResolution object for power field
+        """
         final = {}
 
         for field in ['mileage', 'year', 'power', 'fuel']:
+            # Special handling for power using power_resolution
+            if field == 'power' and power_resolution is not None:
+                final[field] = power_resolution.resolved_value
+                if power_resolution.disagreement_type == "MAJOR":
+                    logger.debug(
+                        f"Power disagreement: ML={power_resolution.ml_raw}, "
+                        f"Regex={power_resolution.regex_raw} - "
+                        f"Resolved to {power_resolution.resolved_value} "
+                        f"({power_resolution.resolution_method})"
+                    )
+                continue
+
+            # Standard decision logic for other fields
             if field in comparison['agreements']:
                 # Both agree - high confidence
                 final[field] = ml_result[field]
@@ -371,12 +434,18 @@ class ProductionExtractor:
                 final[field] = None
 
         # Determine confidence
+        # For power, use the power_resolution confidence to adjust overall confidence
         if comparison['agreement_level'] == 'full':
             confidence = 'high'
         elif comparison['agreement_level'] == 'partial':
             confidence = 'medium'
         else:
             confidence = 'low'
+
+        # Adjust confidence based on power resolution if it's a major disagreement
+        if power_resolution and power_resolution.disagreement_type == "MAJOR":
+            if confidence == 'high':
+                confidence = 'medium'  # Downgrade if power has major disagreement
 
         return final, confidence
 
