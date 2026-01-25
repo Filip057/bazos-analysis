@@ -54,6 +54,127 @@ class CarDataExtractor:
             logger.info("Creating blank Czech model")
             self.nlp = spacy.blank("cs")  # Czech language
 
+    def _validate_and_clean_entities(self, text: str, entities: List[Tuple[int, int, str]]) -> List[Tuple[int, int, str]]:
+        """
+        Validate and clean entities to prevent training errors.
+
+        Removes:
+        - Overlapping entities
+        - Misaligned entities (don't align with token boundaries)
+        - Invalid spans (out of bounds, negative, etc.)
+        """
+        from spacy.training.iob_utils import offsets_to_biluo_tags
+
+        if not entities:
+            return []
+
+        # Remove invalid spans
+        valid_entities = []
+        for start, end, label in entities:
+            if start < 0 or end < 0 or start >= end or end > len(text):
+                logger.warning(f"Skipping invalid entity span ({start}, {end}, {label}) in text: {text[:50]}...")
+                continue
+            valid_entities.append((start, end, label))
+
+        if not valid_entities:
+            return []
+
+        # Check alignment with spaCy tokenization
+        doc = self.nlp.make_doc(text)
+        try:
+            biluo_tags = offsets_to_biluo_tags(doc, valid_entities)
+
+            # Remove misaligned entities (marked with '-')
+            aligned_entities = []
+            for ent, tag in zip(valid_entities, biluo_tags):
+                if '-' not in str(tag):
+                    aligned_entities.append(ent)
+                else:
+                    start, end, label = ent
+                    logger.warning(f"Skipping misaligned entity ({start}, {end}, {label}): '{text[start:end]}' in text: {text[:50]}...")
+
+            valid_entities = aligned_entities
+
+        except ValueError as e:
+            # If we get an error about overlapping entities, resolve them
+            if "overlapping" in str(e) or "conflicting" in str(e):
+                logger.warning(f"Detected overlapping entities in text: {text[:50]}...")
+                valid_entities = self._resolve_overlapping_entities(valid_entities, text)
+            else:
+                raise
+
+        return valid_entities
+
+    def _resolve_overlapping_entities(self, entities: List[Tuple[int, int, str]], text: str) -> List[Tuple[int, int, str]]:
+        """
+        Resolve overlapping entities by keeping the longer/more specific one.
+
+        Priority: MILEAGE > YEAR > POWER > FUEL
+        """
+        PRIORITY = {'MILEAGE': 4, 'YEAR': 3, 'POWER': 2, 'FUEL': 1}
+
+        if not entities or len(entities) <= 1:
+            return entities
+
+        # Sort by start position
+        sorted_entities = sorted(entities, key=lambda x: (x[0], x[1]))
+
+        cleaned = []
+        i = 0
+
+        while i < len(sorted_entities):
+            current = sorted_entities[i]
+            start1, end1, label1 = current
+
+            # Check for overlaps with remaining entities
+            j = i + 1
+            has_overlap = False
+
+            while j < len(sorted_entities):
+                start2, end2, label2 = sorted_entities[j]
+
+                # Check if they overlap
+                if not (end1 <= start2 or end2 <= start1):
+                    has_overlap = True
+
+                    # Resolve by keeping the better one
+                    if start1 == start2 and end1 == end2:
+                        # Same span, use priority
+                        if PRIORITY.get(label1, 0) >= PRIORITY.get(label2, 0):
+                            winner = current
+                        else:
+                            winner = sorted_entities[j]
+                            current = winner
+                    elif (end1 - start1) > (end2 - start2):
+                        # Keep longer span
+                        winner = current
+                    elif (end2 - start2) > (end1 - start1):
+                        winner = sorted_entities[j]
+                        current = winner
+                    else:
+                        # Same length, use priority
+                        if PRIORITY.get(label1, 0) >= PRIORITY.get(label2, 0):
+                            winner = current
+                        else:
+                            winner = sorted_entities[j]
+                            current = winner
+
+                    # Remove the loser
+                    loser = sorted_entities[j] if winner == current else current
+                    logger.warning(f"Resolved overlap: kept {winner[2]} '{text[winner[0]:winner[1]]}', removed {loser[2]} '{text[loser[0]:loser[1]]}'")
+
+                    sorted_entities.pop(j)
+                    # Update current to winner
+                    current = winner
+                    start1, end1, label1 = current
+                else:
+                    j += 1
+
+            cleaned.append(current)
+            i += 1
+
+        return cleaned
+
     def train(self, training_data: List[Tuple[str, Dict]],
               n_iter: int = 30,
               output_dir: str = "./car_ner_model"):
@@ -74,6 +195,28 @@ class CarDataExtractor:
             ]
         """
         logger.info(f"Starting training with {len(training_data)} examples...")
+
+        # Validate and clean training data
+        logger.info("Validating and cleaning training data...")
+        cleaned_data = []
+        skipped_examples = 0
+
+        for text, annotations in training_data:
+            entities = annotations.get("entities", [])
+            cleaned_entities = self._validate_and_clean_entities(text, entities)
+
+            if cleaned_entities:
+                cleaned_data.append((text, {"entities": cleaned_entities}))
+            else:
+                skipped_examples += 1
+
+        if skipped_examples > 0:
+            logger.warning(f"Skipped {skipped_examples} examples with no valid entities")
+
+        logger.info(f"Cleaned training data: {len(cleaned_data)} examples ready for training")
+
+        # Use cleaned data for training
+        training_data = cleaned_data
 
         # Add NER pipeline component if not exists
         if "ner" not in self.nlp.pipe_names:
