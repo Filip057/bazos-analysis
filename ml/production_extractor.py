@@ -29,6 +29,7 @@ from collections import Counter
 from ml.ml_extractor import CarDataExtractor
 from ml.context_aware_patterns import ContextAwarePatterns
 from ml.power_resolver import resolve_power
+from ml.mileage_resolver import resolve_mileage
 
 
 class DataNormalizer:
@@ -193,7 +194,8 @@ class ProductionExtractor:
                 'confidence': 'high' | 'medium' | 'low',
                 'agreement': True/False,
                 'flagged_for_review': True/False,
-                'power_resolution': PowerResolution object with detailed metadata
+                'power_resolution': PowerResolution object with detailed metadata,
+                'mileage_resolution': MileageResolution object with detailed metadata
             }
         """
         self.stats['total_extractions'] += 1
@@ -211,24 +213,33 @@ class ProductionExtractor:
             prefer_ml=False  # Prefer regex by default (more conservative)
         )
 
-        # 3b. Update raw results with resolved power value
+        # 3b. MILEAGE RESOLUTION - Use advanced resolution system for mileage
+        mileage_resolution = resolve_mileage(
+            ml_raw=ml_result_raw.get('mileage'),
+            regex_raw=regex_result_raw.get('mileage'),
+            prefer_ml=True  # Prefer ML for mileage (user preference)
+        )
+
+        # 3c. Update raw results with resolved values
         ml_result_raw_with_resolved_power = ml_result_raw.copy()
         regex_result_raw_with_resolved_power = regex_result_raw.copy()
-        # Keep originals, but add resolved power for comparison
+        # Keep originals, but add resolved values for comparison
         final_power_raw = power_resolution.resolved_value
+        final_mileage_raw = mileage_resolution.resolved_value
 
         # 4. Compare RAW results (exact match only!)
         #    "dieselový" != "diesel" → disagreement (you want to see this!)
         #    "145 KW" != "145" → disagreement (you want to see this!)
-        #    For power, use the power_resolution metadata
-        comparison = self._compare_results(ml_result_raw, regex_result_raw, power_resolution)
+        #    For power and mileage, use the resolution metadata
+        comparison = self._compare_results(ml_result_raw, regex_result_raw, power_resolution, mileage_resolution)
 
         # 5. Make decision based on RAW comparison
         final_result_raw, confidence = self._decide_final_result(
             ml_result_raw,
             regex_result_raw,
             comparison,
-            power_resolution
+            power_resolution,
+            mileage_resolution
         )
 
         # 6. Handle based on agreement level (save RAW data!)
@@ -255,7 +266,7 @@ class ProductionExtractor:
         normalizer = DataNormalizer()
         final_result_normalized = self._normalize_result(final_result_raw, normalizer)
 
-        # 9. Prepare response (normalized for DB, RAW for training, power resolution metadata)
+        # 9. Prepare response (normalized for DB, RAW for training, resolution metadata)
         response = {
             **final_result_normalized,  # Normalized for database
             'confidence': confidence,
@@ -264,8 +275,9 @@ class ProductionExtractor:
             'car_id': car_id,
             # Keep raw values for debugging/training
             'raw_values': final_result_raw,
-            # Add power resolution metadata
-            'power_resolution': power_resolution.to_dict()
+            # Add resolution metadata
+            'power_resolution': power_resolution.to_dict(),
+            'mileage_resolution': mileage_resolution.to_dict()
         }
 
         return response
@@ -326,7 +338,7 @@ class ProductionExtractor:
             'fuel': normalizer.normalize_fuel(result.get('fuel'))
         }
 
-    def _compare_results(self, ml_result: Dict, regex_result: Dict, power_resolution=None) -> Dict:
+    def _compare_results(self, ml_result: Dict, regex_result: Dict, power_resolution=None, mileage_resolution=None) -> Dict:
         """
         Compare ML and regex results field by field
 
@@ -334,6 +346,7 @@ class ProductionExtractor:
             ml_result: Raw ML extraction results
             regex_result: Raw regex extraction results
             power_resolution: PowerResolution object for intelligent power comparison
+            mileage_resolution: MileageResolution object for intelligent mileage comparison
         """
         comparison = {
             'agreements': [],
@@ -342,7 +355,8 @@ class ProductionExtractor:
             'regex_only': [],
             'both_empty': [],
             'agreement_level': None,
-            'power_disagreement_type': None  # Track power disagreement type
+            'power_disagreement_type': None,  # Track power disagreement type
+            'mileage_disagreement_type': None  # Track mileage disagreement type
         }
 
         for field in ['mileage', 'year', 'power', 'fuel']:
@@ -361,6 +375,20 @@ class ProductionExtractor:
                     comparison['disagreements'].append(field)
 
                 comparison['power_disagreement_type'] = power_resolution.disagreement_type
+                continue
+
+            # Special handling for mileage using mileage_resolution
+            if field == 'mileage' and mileage_resolution is not None:
+                # Use the mileage resolver's disagreement classification
+                if mileage_resolution.disagreement_type == "NONE":
+                    comparison['agreements'].append(field)
+                elif mileage_resolution.disagreement_type == "MINOR_FORMATTING":
+                    # Minor formatting difference - count as agreement for overall confidence
+                    comparison['agreements'].append(field)
+                else:  # MAJOR disagreement
+                    comparison['disagreements'].append(field)
+
+                comparison['mileage_disagreement_type'] = mileage_resolution.disagreement_type
                 continue
 
             # Standard comparison for other fields
@@ -390,7 +418,7 @@ class ProductionExtractor:
         return comparison
 
     def _decide_final_result(self, ml_result: Dict, regex_result: Dict,
-                            comparison: Dict, power_resolution=None) -> tuple:
+                            comparison: Dict, power_resolution=None, mileage_resolution=None) -> tuple:
         """
         Decide final values based on comparison
 
@@ -399,6 +427,7 @@ class ProductionExtractor:
             regex_result: Raw regex extraction results
             comparison: Comparison results
             power_resolution: PowerResolution object for power field
+            mileage_resolution: MileageResolution object for mileage field
         """
         final = {}
 
@@ -412,6 +441,25 @@ class ProductionExtractor:
                         f"Regex={power_resolution.regex_raw} - "
                         f"Resolved to {power_resolution.resolved_value} "
                         f"({power_resolution.resolution_method})"
+                    )
+                continue
+
+            # Special handling for mileage using mileage_resolution
+            if field == 'mileage' and mileage_resolution is not None:
+                final[field] = mileage_resolution.resolved_value
+                if mileage_resolution.disagreement_type == "MAJOR":
+                    logger.debug(
+                        f"Mileage disagreement: ML={mileage_resolution.ml_raw}, "
+                        f"Regex={mileage_resolution.regex_raw} - "
+                        f"Resolved to {mileage_resolution.resolved_value} "
+                        f"({mileage_resolution.resolution_method})"
+                    )
+                elif mileage_resolution.disagreement_type == "MINOR_FORMATTING":
+                    logger.debug(
+                        f"Mileage formatting difference: ML={mileage_resolution.ml_raw}, "
+                        f"Regex={mileage_resolution.regex_raw} - "
+                        f"Resolved to {mileage_resolution.resolved_value} "
+                        f"({mileage_resolution.resolution_method})"
                     )
                 continue
 
@@ -434,7 +482,7 @@ class ProductionExtractor:
                 final[field] = None
 
         # Determine confidence
-        # For power, use the power_resolution confidence to adjust overall confidence
+        # For power and mileage, use the resolution confidence to adjust overall confidence
         if comparison['agreement_level'] == 'full':
             confidence = 'high'
         elif comparison['agreement_level'] == 'partial':
@@ -446,6 +494,11 @@ class ProductionExtractor:
         if power_resolution and power_resolution.disagreement_type == "MAJOR":
             if confidence == 'high':
                 confidence = 'medium'  # Downgrade if power has major disagreement
+
+        # Adjust confidence based on mileage resolution if it's a major disagreement
+        if mileage_resolution and mileage_resolution.disagreement_type == "MAJOR":
+            if confidence == 'high':
+                confidence = 'medium'  # Downgrade if mileage has major disagreement
 
         return final, confidence
 

@@ -60,19 +60,55 @@ class ContextAwarePatterns:
         re.compile(r'\b(19\d{2}|20[0-2]\d)\b'),  # Any 4-digit year
     ]
 
-    # MILEAGE PATTERNS - Context-aware (FIXED: support dots as separators)
+    # MILEAGE PATTERNS - Context-aware (EXPANDED: support all user variations)
 
     MILEAGE_HIGH_CONFIDENCE = [
-        re.compile(r'(?:najeto|nájezd|km\s+celkem|počet\s+km)\s*[:.]?\s*((\d{1,3}(?:[\s.]?\d{3})*)\s?km)', re.IGNORECASE),
-        re.compile(r'((\d{1,3}(?:[\s.]?\d{3})*)\s?km)\s+(?:najeto|celkem)', re.IGNORECASE),
-        re.compile(r'(?:najeto|nájezd)\s*[:.]?\s*((\d{1,3})\s?(?:tis|tisíc|t)\.?\s?km)', re.IGNORECASE),  # "najeto 150 tis km"
+        # With explicit context (najeto, nájezd, etc.) + km
+        re.compile(r'(?:najeto|nájezd|km\s+celkem|počet\s+km)\s*[:.]?\s*((\d{1,3}(?:[\s._]?\d{3})+)\s?km)', re.IGNORECASE),  # "najeto 200 000 km"
+        re.compile(r'((\d{1,3}(?:[\s._]?\d{3})+)\s?km)\s+(?:najeto|celkem)', re.IGNORECASE),  # "200 000 km najeto"
+
+        # With explicit context + separator BUT NO km (needs explicit "najeto" context)
+        re.compile(r'(?:najeto|nájezd)\s*[:.]?\s*((\d{1,3}[\s._]\d{3}(?:[\s._]\d{3})?)(?!\s?km))', re.IGNORECASE),  # "najeto 123 000", "najeto 123.000"
+
+        # With thousands abbreviations + context
+        re.compile(r'(?:najeto|nájezd)\s*[:.]?\s*((\d{1,3}(?:[.,]\d+)?)\s?(?:tis|tisíc)\.?\s?(?:km)?)', re.IGNORECASE),  # "najeto 150 tis", "najeto 150tis km"
+        re.compile(r'(?:najeto|nájezd)\s*[:.]?\s*((\d{1,3}(?:[.,]\d+)?)\s?k(?:\s?km)?)', re.IGNORECASE),  # "najeto 150k", "najeto150k km"
+        re.compile(r'(?:najeto|nájezd)\s*[:.]?\s*((\d{1,3}(?:[.,]\d+)?)\s?t\.?(?:\s?km)?)', re.IGNORECASE),  # "najeto 150t", "najeto 150t km"
+
+        # With placeholder formats + context
+        re.compile(r'(?:najeto|nájezd)\s*[:.]?\s*((\d{1,3})\s?xxx(?:\s?km)?)', re.IGNORECASE),  # "najeto 150xxx", "najeto150xxx km"
+        re.compile(r'(?:najeto|nájezd)\s*[:.]?\s*((\d{1,3})\s?\*{3}(?:\s?km)?)', re.IGNORECASE),  # "najeto 150***", "najeto150*** km"
+
+        # Standard format + context (no thousands separator)
+        re.compile(r'(?:najeto|nájezd)\s*[:.]?\s*((\d{5,6})(?:\s?km)?)', re.IGNORECASE),  # "najeto 150000", "najeto150000 km"
     ]
 
     MILEAGE_MEDIUM_CONFIDENCE = [
-        re.compile(r'\b((\d{1,3}(?:[\s.]?\d{3})*)\s?km)\b', re.IGNORECASE),  # "150000 km", "150 000 km", "150.000 km"
-        re.compile(r'\b((\d{1,3})\s?(?:tis|tisíc)\.?\s?km)', re.IGNORECASE),  # "150 tis km"
-        re.compile(r'\b((\d{1,3})\s?t(?!d|s|i|e)\s?km)', re.IGNORECASE),  # "150t km" (not TDI)
-        re.compile(r'\b((\d{1,3}(?:[\s.]?\d{3})*)\s?xxx\s?km)', re.IGNORECASE),  # "150 xxx km"
+        # Standard formats WITH km
+        re.compile(r'\b((\d{1,3}(?:[\s._]\d{3})+)\s?km)\b', re.IGNORECASE),  # "150 000 km", "150.000 km", "150_000km"
+        re.compile(r'\b((\d{5,6})\s?km)\b', re.IGNORECASE),  # "150000 km", "150000km"
+
+        # Thousands abbreviations WITH km
+        re.compile(r'\b((\d{1,3}(?:[.,]\d+)?)\s?(?:tis|tisíc)\.?\s?km)', re.IGNORECASE),  # "150 tis km", "150tis. km"
+        re.compile(r'\b((\d{1,3}(?:[.,]\d+)?)\s?k\s?km)', re.IGNORECASE),  # "150k km", "150 k km"
+        re.compile(r'\b((\d{1,3}(?:[.,]\d+)?)\s?t(?!d|s|i|e)\s?km)', re.IGNORECASE),  # "150t km" (not TDI)
+
+        # Placeholder formats WITH km
+        re.compile(r'\b((\d{1,3})\s?xxx\s?km)', re.IGNORECASE),  # "150 xxx km", "150xxx km"
+        re.compile(r'\b((\d{1,3})\s?\*{3}\s?km)', re.IGNORECASE),  # "150 *** km", "150*** km"
+
+        # Thousands abbreviations WITHOUT km (standalone)
+        re.compile(r'\b((\d{1,3}(?:[.,]\d+)?)\s?(?:tis|tisíc)\.?)(?!\w)', re.IGNORECASE),  # "150tis", "150 tis."
+        re.compile(r'\b((\d{1,3}(?:[.,]\d+)?)k)(?!w|m|\w)', re.IGNORECASE),  # "150k" (not kW, km)
+        re.compile(r'\b((\d{1,3}(?:[.,]\d+)?)\s?t)(?!d|s|i|e|a|\w)', re.IGNORECASE),  # "150t" (not TDI, TSI)
+
+        # Placeholder formats WITHOUT km
+        re.compile(r'\b((\d{1,3})\s?xxx)(?!\w)', re.IGNORECASE),  # "150xxx", "150 xxx"
+        re.compile(r'\b((\d{1,3})\s?\*{3})(?!\w)', re.IGNORECASE),  # "150***", "150 ***"
+
+        # Standard formats WITHOUT km (with separator) - must have 5+ total digits to be mileage
+        re.compile(r'\b((\d{1,3}[\s._]\d{3}(?:[\s._]\d{3})?))(?!\s?k[mw]|\w)', re.IGNORECASE),  # "150 000", "150.000" (not followed by km/kw)
+        re.compile(r'\b((\d{5,6}))(?!\s?k[mw]|\d)', re.IGNORECASE),  # "150000" (5-6 digits)
     ]
 
     # EXCLUDE mileage patterns (daily mileage, range, service records, etc.)
@@ -235,40 +271,66 @@ class ContextAwarePatterns:
         return self._deduplicate_matches(matches)
 
     def _parse_mileage(self, number_str: str, full_text: str) -> int:
-        """Parse mileage value, handling abbreviations"""
-        # Remove spaces, dots, newlines, tabs (regex can capture multi-line)
-        number_str = number_str.replace(' ', '').replace('.', '').replace('\n', '').replace('\t', '').replace('\r', '')
+        """Parse mileage value, handling abbreviations
 
-        # Extract only numbers (ignore any text mixed in)
-        numbers = re.findall(r'\d+', number_str)
+        Handles formats:
+        - 150 000, 150.000, 150_000 → 150000
+        - 150tis, 150k, 150t → 150000 (multiply by 1000)
+        - 150xxx, 150*** → 150000 (multiply by 1000)
+        - 150000 → 150000 (already full number)
+        - 1.5tis → 1500 (decimal thousands)
+        """
+        full_text_lower = full_text.lower().strip()
 
+        # Check for thousands indicators FIRST (before parsing the number)
+        # This prevents false matches like "200 000 km" matching "0 k"
+        has_tis = bool(re.search(r'^(\d+(?:[.,]\d+)?)\s*tis(?:íc)?\.?(?:\s*km)?$', full_text_lower))
+        has_k = bool(re.search(r'^(\d+(?:[.,]\d+)?)\s*k\s*(?:km)?$', full_text_lower))
+        has_t = bool(re.search(r'^(\d+(?:[.,]\d+)?)\s*t\.?\s*(?:km)?$', full_text_lower) and 'tdi' not in full_text_lower and 'tsi' not in full_text_lower)
+        has_xxx = bool(re.search(r'^(\d+)\s*xxx\s*(?:km)?$', full_text_lower))
+        has_stars = '***' in full_text or '* * *' in full_text
+
+        # Determine if we should multiply by 1000
+        multiply_by_thousand = has_tis or has_k or has_t or has_xxx or has_stars
+
+        # Parse the numeric value
+        # Distinguish between decimal point (1.5) and thousands separator (200.000)
+        # European format: dot with exactly 3 digits = thousands separator
+        # Otherwise: decimal point
+
+        # Check for thousands separator (e.g., "200.000" or "200,000")
+        thousands_sep_match = re.match(r'(\d{1,3})[.,](\d{3})(?:[.,](\d{3}))?', number_str)
+        if thousands_sep_match and not multiply_by_thousand:
+            # It's a thousands separator format like "200.000" or "200,000"
+            # Join all the groups
+            parts = [thousands_sep_match.group(1), thousands_sep_match.group(2)]
+            if thousands_sep_match.group(3):
+                parts.append(thousands_sep_match.group(3))
+            base_value = int(''.join(parts))
+            return base_value
+
+        # Check for decimal number with thousands indicator (e.g., "1.5tis")
+        decimal_match = re.match(r'(\d+)[.,](\d{1,2})', number_str)
+        if decimal_match and multiply_by_thousand:
+            # It's a decimal like "1.5tis" → 1.5 * 1000 = 1500
+            value_str = f"{decimal_match.group(1)}.{decimal_match.group(2)}"
+            base_value = float(value_str)
+            return int(base_value * 1000)
+
+        # Remove separators for integer parsing
+        cleaned = number_str.replace(' ', '').replace('.', '').replace('_', '').replace(',', '').replace('\n', '').replace('\t', '').replace('\r', '')
+
+        # Extract only the numeric part
+        numbers = re.findall(r'\d+', cleaned)
         if not numbers:
             return 0
 
-        # For mileage, prefer larger numbers (likely km, not year)
-        # Example: "2003\n190000" → prefer 190000 (mileage) over 2003 (year)
-        valid_mileages = []
-        for num_str in numbers:
-            num = int(num_str)
-            # Reasonable mileage range: 1,000 - 999,999 km
-            if 1000 <= num <= 999999:
-                valid_mileages.append(num)
-            # Could be thousands notation: 10-999 (will be multiplied by 1000)
-            elif 10 <= num <= 999:
-                valid_mileages.append(num)
+        # Join all numbers (handles cases like "200 000" → "200000")
+        joined_number = ''.join(numbers)
+        base_value = int(joined_number)
 
-        # Use first valid mileage, or fallback to first number
-        base_value = valid_mileages[0] if valid_mileages else int(numbers[0])
-
-        # Check for thousands abbreviations (only immediately after the number)
-        # Examples: "150tis km", "150t km", "150 t km"
-        full_text_lower = full_text.lower()
-
-        # Look for 'tis' or 't' immediately after digits
-        if re.search(r'\d+\s*tis\.?\s*km', full_text_lower):
-            return base_value * 1000
-        elif re.search(r'\d+\s*t\.?\s*km', full_text_lower) and not re.search(r'\d+\s*td[is]', full_text_lower):
-            # "150t km" but NOT "150 TDI" (car engine type)
+        # If we have a thousands indicator, multiply
+        if multiply_by_thousand and base_value < 1000:
             return base_value * 1000
 
         return base_value
