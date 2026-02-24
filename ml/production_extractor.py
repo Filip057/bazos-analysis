@@ -30,6 +30,7 @@ from ml.ml_extractor import CarDataExtractor
 from ml.context_aware_patterns import ContextAwarePatterns
 from ml.power_resolver import resolve_power
 from ml.mileage_resolver import resolve_mileage
+from ml.year_feedback_verifier import YearFeedbackVerifier
 
 
 class DataNormalizer:
@@ -153,6 +154,9 @@ class ProductionExtractor:
         # Load context-aware regex
         self.regex_patterns = ContextAwarePatterns()
 
+        # Year feedback verifier (ML = None, Regex = found → verify via ML)
+        self.year_verifier = YearFeedbackVerifier(self.ml_extractor)
+
         # Files for continuous learning
         self.auto_training_file = Path(auto_training_file)
         self.review_queue_file = Path(review_queue_file)
@@ -195,7 +199,8 @@ class ProductionExtractor:
                 'agreement': True/False,
                 'flagged_for_review': True/False,
                 'power_resolution': PowerResolution object with detailed metadata,
-                'mileage_resolution': MileageResolution object with detailed metadata
+                'mileage_resolution': MileageResolution object with detailed metadata,
+                'year_verification': YearVerification object (only when ML missed year but regex found it)
             }
         """
         self.stats['total_extractions'] += 1
@@ -220,18 +225,38 @@ class ProductionExtractor:
             prefer_ml=True  # Prefer ML for mileage (user preference)
         )
 
-        # 3c. Update raw results with resolved values
-        ml_result_raw_with_resolved_power = ml_result_raw.copy()
-        regex_result_raw_with_resolved_power = regex_result_raw.copy()
-        # Keep originals, but add resolved values for comparison
-        final_power_raw = power_resolution.resolved_value
-        final_mileage_raw = mileage_resolution.resolved_value
+        # 3c. YEAR FEEDBACK VERIFICATION
+        #   Triggered only when: ML didn't find year, but regex did.
+        #   ML is asked to verify the regex candidate in a focused context window.
+        year_verification = None
+        if ml_result_raw.get('year') is None and regex_result_raw.get('year') is not None:
+            # Get the regex confidence level for this year candidate
+            year_matches = self.regex_patterns.find_years(text)
+            regex_year_confidence = 'low'
+            if year_matches:
+                best = max(year_matches, key=lambda m: {'high': 3, 'medium': 2, 'low': 1}[m.confidence])
+                regex_year_confidence = best.confidence
+
+            year_verification = self.year_verifier.verify(
+                text=text,
+                regex_candidate=regex_result_raw['year'],
+                regex_confidence=regex_year_confidence
+            )
+            logger.debug(
+                f"Year feedback verification: candidate={year_verification.candidate_year}, "
+                f"regex_confidence={year_verification.regex_confidence}, "
+                f"ml_confirmed={year_verification.ml_confirmed}, "
+                f"result={year_verification.method} ({year_verification.confidence:.2f})"
+            )
 
         # 4. Compare RAW results (exact match only!)
         #    "dieselový" != "diesel" → disagreement (you want to see this!)
         #    "145 KW" != "145" → disagreement (you want to see this!)
-        #    For power and mileage, use the resolution metadata
-        comparison = self._compare_results(ml_result_raw, regex_result_raw, power_resolution, mileage_resolution)
+        #    Power and mileage use resolution metadata; year uses feedback verification
+        comparison = self._compare_results(
+            ml_result_raw, regex_result_raw,
+            power_resolution, mileage_resolution, year_verification
+        )
 
         # 5. Make decision based on RAW comparison
         final_result_raw, confidence = self._decide_final_result(
@@ -239,7 +264,8 @@ class ProductionExtractor:
             regex_result_raw,
             comparison,
             power_resolution,
-            mileage_resolution
+            mileage_resolution,
+            year_verification
         )
 
         # 6. Handle based on agreement level (save RAW data!)
@@ -277,7 +303,9 @@ class ProductionExtractor:
             'raw_values': final_result_raw,
             # Add resolution metadata
             'power_resolution': power_resolution.to_dict(),
-            'mileage_resolution': mileage_resolution.to_dict()
+            'mileage_resolution': mileage_resolution.to_dict(),
+            # Year verification only present when ML missed year but regex found it
+            'year_verification': year_verification.to_dict() if year_verification else None
         }
 
         return response
@@ -338,7 +366,9 @@ class ProductionExtractor:
             'fuel': normalizer.normalize_fuel(result.get('fuel'))
         }
 
-    def _compare_results(self, ml_result: Dict, regex_result: Dict, power_resolution=None, mileage_resolution=None) -> Dict:
+    def _compare_results(self, ml_result: Dict, regex_result: Dict,
+                         power_resolution=None, mileage_resolution=None,
+                         year_verification=None) -> Dict:
         """
         Compare ML and regex results field by field
 
@@ -347,6 +377,7 @@ class ProductionExtractor:
             regex_result: Raw regex extraction results
             power_resolution: PowerResolution object for intelligent power comparison
             mileage_resolution: MileageResolution object for intelligent mileage comparison
+            year_verification: YearVerification object (when ML missed year but regex found it)
         """
         comparison = {
             'agreements': [],
@@ -355,8 +386,9 @@ class ProductionExtractor:
             'regex_only': [],
             'both_empty': [],
             'agreement_level': None,
-            'power_disagreement_type': None,  # Track power disagreement type
-            'mileage_disagreement_type': None  # Track mileage disagreement type
+            'power_disagreement_type': None,
+            'mileage_disagreement_type': None,
+            'year_verification_method': None  # Track year verification result
         }
 
         for field in ['mileage', 'year', 'power', 'fuel']:
@@ -391,6 +423,19 @@ class ProductionExtractor:
                 comparison['mileage_disagreement_type'] = mileage_resolution.disagreement_type
                 continue
 
+            # Special handling for year using feedback verification
+            # (only triggered when ML = None, Regex = found)
+            if field == 'year' and year_verification is not None:
+                if year_verification.verified:
+                    # ML confirmed the regex candidate → treat as agreement
+                    comparison['agreements'].append(field)
+                else:
+                    # ML didn't confirm → discard the regex candidate
+                    comparison['both_empty'].append(field)
+
+                comparison['year_verification_method'] = year_verification.method
+                continue
+
             # Standard comparison for other fields
             if ml_val is not None and regex_val is not None:
                 if ml_val == regex_val:
@@ -418,7 +463,8 @@ class ProductionExtractor:
         return comparison
 
     def _decide_final_result(self, ml_result: Dict, regex_result: Dict,
-                            comparison: Dict, power_resolution=None, mileage_resolution=None) -> tuple:
+                            comparison: Dict, power_resolution=None,
+                            mileage_resolution=None, year_verification=None) -> tuple:
         """
         Decide final values based on comparison
 
@@ -428,6 +474,7 @@ class ProductionExtractor:
             comparison: Comparison results
             power_resolution: PowerResolution object for power field
             mileage_resolution: MileageResolution object for mileage field
+            year_verification: YearVerification object (when ML missed year but regex found it)
         """
         final = {}
 
@@ -460,6 +507,23 @@ class ProductionExtractor:
                         f"Regex={mileage_resolution.regex_raw} - "
                         f"Resolved to {mileage_resolution.resolved_value} "
                         f"({mileage_resolution.resolution_method})"
+                    )
+                continue
+
+            # Special handling for year using feedback verification
+            if field == 'year' and year_verification is not None:
+                if year_verification.verified:
+                    final[field] = year_verification.candidate_year
+                    logger.debug(
+                        f"Year feedback verified: regex={year_verification.candidate_year}, "
+                        f"ml_confirmed={year_verification.ml_confirmed}, "
+                        f"method={year_verification.method} ({year_verification.confidence:.2f})"
+                    )
+                else:
+                    final[field] = None
+                    logger.debug(
+                        f"Year feedback rejected: regex={year_verification.candidate_year}, "
+                        f"method={year_verification.method} ({year_verification.confidence:.2f})"
                     )
                 continue
 
