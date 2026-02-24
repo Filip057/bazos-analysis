@@ -31,6 +31,7 @@ from ml.context_aware_patterns import ContextAwarePatterns
 from ml.power_resolver import resolve_power
 from ml.mileage_resolver import resolve_mileage
 from ml.year_feedback_verifier import YearFeedbackVerifier
+from ml.entity_feedback_verifier import EntityFeedbackVerifier
 
 
 class DataNormalizer:
@@ -157,6 +158,9 @@ class ProductionExtractor:
         # Year feedback verifier (ML = None, Regex = found → verify via ML)
         self.year_verifier = YearFeedbackVerifier(self.ml_extractor)
 
+        # Generic entity feedback verifier (for power, mileage, fuel)
+        self.entity_verifier = EntityFeedbackVerifier(self.ml_extractor)
+
         # Files for continuous learning
         self.auto_training_file = Path(auto_training_file)
         self.review_queue_file = Path(review_queue_file)
@@ -200,7 +204,10 @@ class ProductionExtractor:
                 'flagged_for_review': True/False,
                 'power_resolution': PowerResolution object with detailed metadata,
                 'mileage_resolution': MileageResolution object with detailed metadata,
-                'year_verification': YearVerification object (only when ML missed year but regex found it)
+                'year_verification': YearVerification object (only when ML missed year but regex found it),
+                'power_verification': EntityVerification object (only when power_resolution is REGEX_ONLY),
+                'mileage_verification': EntityVerification object (only when mileage_resolution is REGEX_ONLY),
+                'fuel_verification': EntityVerification object (only when ML missed fuel but regex found it)
             }
         """
         self.stats['total_extractions'] += 1
@@ -249,13 +256,99 @@ class ProductionExtractor:
                 f"result={year_verification.method} ({year_verification.confidence:.2f})"
             )
 
+        # 3d. POWER FEEDBACK VERIFICATION
+        #   Triggered when power_resolution is REGEX_ONLY (ML=None, regex=found).
+        #   Enhances REGEX_ONLY confidence using ML feedback.
+        power_verification = None
+        if power_resolution.resolution_method == 'REGEX_ONLY':
+            # Get regex confidence for power
+            power_matches = self.regex_patterns.find_power(text)
+            regex_power_confidence = 'low'
+            if power_matches:
+                best = max(power_matches, key=lambda m: {'high': 3, 'medium': 2, 'low': 1}[m.confidence])
+                regex_power_confidence = best.confidence
+
+            power_verification = self.entity_verifier.verify(
+                text=text,
+                entity_type='power',
+                regex_candidate=power_resolution.regex_raw,
+                regex_confidence=regex_power_confidence
+            )
+
+            # Update power_resolution based on feedback
+            if power_verification.verified:
+                power_resolution.confidence = power_verification.confidence
+                power_resolution.resolution_method = power_verification.method
+            else:
+                # Reject the regex-only power
+                power_resolution.resolved_value = None
+                power_resolution.confidence = power_verification.confidence
+
+            logger.debug(
+                f"Power feedback verification: candidate={power_verification.candidate_value}, "
+                f"ml_confirmed={power_verification.ml_confirmed}, "
+                f"result={power_verification.method} ({power_verification.confidence:.2f})"
+            )
+
+        # 3e. MILEAGE FEEDBACK VERIFICATION
+        #   Triggered when mileage_resolution is REGEX_ONLY (ML=None, regex=found).
+        mileage_verification = None
+        if mileage_resolution.resolution_method == 'REGEX_ONLY':
+            # Get regex confidence for mileage
+            mileage_matches = self.regex_patterns.find_mileage(text)
+            regex_mileage_confidence = 'low'
+            if mileage_matches:
+                best = max(mileage_matches, key=lambda m: {'high': 3, 'medium': 2, 'low': 1}[m.confidence])
+                regex_mileage_confidence = best.confidence
+
+            mileage_verification = self.entity_verifier.verify(
+                text=text,
+                entity_type='mileage',
+                regex_candidate=mileage_resolution.regex_raw,
+                regex_confidence=regex_mileage_confidence
+            )
+
+            # Update mileage_resolution based on feedback
+            if mileage_verification.verified:
+                mileage_resolution.confidence = mileage_verification.confidence
+                mileage_resolution.resolution_method = mileage_verification.method
+            else:
+                # Reject the regex-only mileage
+                mileage_resolution.resolved_value = None
+                mileage_resolution.confidence = mileage_verification.confidence
+
+            logger.debug(
+                f"Mileage feedback verification: candidate={mileage_verification.candidate_value}, "
+                f"ml_confirmed={mileage_verification.ml_confirmed}, "
+                f"result={mileage_verification.method} ({mileage_verification.confidence:.2f})"
+            )
+
+        # 3f. FUEL FEEDBACK VERIFICATION
+        #   Fuel doesn't have a resolver, so we verify directly when ML=None, regex=found.
+        fuel_verification = None
+        if ml_result_raw.get('fuel') is None and regex_result_raw.get('fuel') is not None:
+            # Fuel regex doesn't provide confidence levels, so we assume 'medium'
+            fuel_verification = self.entity_verifier.verify(
+                text=text,
+                entity_type='fuel',
+                regex_candidate=regex_result_raw['fuel'],
+                regex_confidence='medium'  # Default for fuel
+            )
+
+            logger.debug(
+                f"Fuel feedback verification: candidate={fuel_verification.candidate_value}, "
+                f"ml_confirmed={fuel_verification.ml_confirmed}, "
+                f"result={fuel_verification.method} ({fuel_verification.confidence:.2f})"
+            )
+
         # 4. Compare RAW results (exact match only!)
         #    "dieselový" != "diesel" → disagreement (you want to see this!)
         #    "145 KW" != "145" → disagreement (you want to see this!)
-        #    Power and mileage use resolution metadata; year uses feedback verification
+        #    Power and mileage use resolution metadata; year/power/mileage/fuel use feedback verification
         comparison = self._compare_results(
             ml_result_raw, regex_result_raw,
-            power_resolution, mileage_resolution, year_verification
+            power_resolution, mileage_resolution,
+            year_verification, power_verification, mileage_verification, fuel_verification
         )
 
         # 5. Make decision based on RAW comparison
@@ -265,7 +358,10 @@ class ProductionExtractor:
             comparison,
             power_resolution,
             mileage_resolution,
-            year_verification
+            year_verification,
+            power_verification,
+            mileage_verification,
+            fuel_verification
         )
 
         # 6. Handle based on agreement level (save RAW data!)
@@ -304,8 +400,11 @@ class ProductionExtractor:
             # Add resolution metadata
             'power_resolution': power_resolution.to_dict(),
             'mileage_resolution': mileage_resolution.to_dict(),
-            # Year verification only present when ML missed year but regex found it
-            'year_verification': year_verification.to_dict() if year_verification else None
+            # Feedback verifications (only present when triggered)
+            'year_verification': year_verification.to_dict() if year_verification else None,
+            'power_verification': power_verification.to_dict() if power_verification else None,
+            'mileage_verification': mileage_verification.to_dict() if mileage_verification else None,
+            'fuel_verification': fuel_verification.to_dict() if fuel_verification else None
         }
 
         return response
@@ -368,7 +467,8 @@ class ProductionExtractor:
 
     def _compare_results(self, ml_result: Dict, regex_result: Dict,
                          power_resolution=None, mileage_resolution=None,
-                         year_verification=None) -> Dict:
+                         year_verification=None, power_verification=None,
+                         mileage_verification=None, fuel_verification=None) -> Dict:
         """
         Compare ML and regex results field by field
 
@@ -378,6 +478,9 @@ class ProductionExtractor:
             power_resolution: PowerResolution object for intelligent power comparison
             mileage_resolution: MileageResolution object for intelligent mileage comparison
             year_verification: YearVerification object (when ML missed year but regex found it)
+            power_verification: EntityVerification for power (when power_resolution is REGEX_ONLY)
+            mileage_verification: EntityVerification for mileage (when mileage_resolution is REGEX_ONLY)
+            fuel_verification: EntityVerification for fuel (when ML missed fuel but regex found it)
         """
         comparison = {
             'agreements': [],
@@ -388,7 +491,10 @@ class ProductionExtractor:
             'agreement_level': None,
             'power_disagreement_type': None,
             'mileage_disagreement_type': None,
-            'year_verification_method': None  # Track year verification result
+            'year_verification_method': None,
+            'power_verification_method': None,
+            'mileage_verification_method': None,
+            'fuel_verification_method': None
         }
 
         for field in ['mileage', 'year', 'power', 'fuel']:
@@ -436,6 +542,19 @@ class ProductionExtractor:
                 comparison['year_verification_method'] = year_verification.method
                 continue
 
+            # Special handling for fuel using feedback verification
+            # (only triggered when ML = None, Regex = found)
+            if field == 'fuel' and fuel_verification is not None:
+                if fuel_verification.verified:
+                    # ML confirmed the regex candidate → treat as agreement
+                    comparison['agreements'].append(field)
+                else:
+                    # ML didn't confirm → discard the regex candidate
+                    comparison['both_empty'].append(field)
+
+                comparison['fuel_verification_method'] = fuel_verification.method
+                continue
+
             # Standard comparison for other fields
             if ml_val is not None and regex_val is not None:
                 if ml_val == regex_val:
@@ -464,7 +583,9 @@ class ProductionExtractor:
 
     def _decide_final_result(self, ml_result: Dict, regex_result: Dict,
                             comparison: Dict, power_resolution=None,
-                            mileage_resolution=None, year_verification=None) -> tuple:
+                            mileage_resolution=None, year_verification=None,
+                            power_verification=None, mileage_verification=None,
+                            fuel_verification=None) -> tuple:
         """
         Decide final values based on comparison
 
@@ -475,6 +596,9 @@ class ProductionExtractor:
             power_resolution: PowerResolution object for power field
             mileage_resolution: MileageResolution object for mileage field
             year_verification: YearVerification object (when ML missed year but regex found it)
+            power_verification: EntityVerification for power (when power_resolution is REGEX_ONLY)
+            mileage_verification: EntityVerification for mileage (when mileage_resolution is REGEX_ONLY)
+            fuel_verification: EntityVerification for fuel (when ML missed fuel but regex found it)
         """
         final = {}
 
@@ -524,6 +648,23 @@ class ProductionExtractor:
                     logger.debug(
                         f"Year feedback rejected: regex={year_verification.candidate_year}, "
                         f"method={year_verification.method} ({year_verification.confidence:.2f})"
+                    )
+                continue
+
+            # Special handling for fuel using feedback verification
+            if field == 'fuel' and fuel_verification is not None:
+                if fuel_verification.verified:
+                    final[field] = fuel_verification.candidate_value
+                    logger.debug(
+                        f"Fuel feedback verified: regex={fuel_verification.candidate_value}, "
+                        f"ml_confirmed={fuel_verification.ml_confirmed}, "
+                        f"method={fuel_verification.method} ({fuel_verification.confidence:.2f})"
+                    )
+                else:
+                    final[field] = None
+                    logger.debug(
+                        f"Fuel feedback rejected: regex={fuel_verification.candidate_value}, "
+                        f"method={fuel_verification.method} ({fuel_verification.confidence:.2f})"
                     )
                 continue
 
