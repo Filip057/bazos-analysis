@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <title>Dashboard – Bazos Analysis</title>
+    <link href="/static/css/styles.css" rel="stylesheet" />
+    <!-- Chart.js (CDN, no extra install needed) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        .stat-card {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 1.25rem 1.5rem;
+            background: #fff;
+            margin-bottom: 1rem;
+        }
+        .stat-card .value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #0d6efd;
+        }
+        .stat-card .label {
+            font-size: 0.85rem;
+            color: #6c757d;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+        }
+        .chart-box {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 1.25rem;
+            background: #fff;
+            margin-bottom: 1.5rem;
+        }
+        .chart-box h6 {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+        }
+        .loading { color: #6c757d; font-style: italic; font-size: 0.85rem; }
+        #brand-filter { width: 200px; }
+        .brand-table td, .brand-table th { font-size: 0.88rem; }
+        .badge-fuel {
+            font-size: 0.78rem;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+        .fuel-diesel { background: #fff3cd; color: #856404; }
+        .fuel-benzin { background: #d1e7dd; color: #0f5132; }
+        .fuel-lpg    { background: #cff4fc; color: #055160; }
+        .fuel-elektro{ background: #d3f9d8; color: #0a3622; }
+        .fuel-other  { background: #e9ecef; color: #495057; }
+    </style>
+</head>
+<body>
+<div class="d-flex" id="wrapper">
+    <!-- Sidebar -->
+    <div class="border-end bg-white" id="sidebar-wrapper">
+        <div class="sidebar-heading border-bottom bg-light">MENU</div>
+        <div class="list-group list-group-flush">
+            <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/">Home</a>
+            <a class="list-group-item list-group-item-action list-group-item-light p-3 active" href="/dashboard">Dashboard</a>
+            <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/car-compare">Car compare</a>
+        </div>
+    </div>
+
+    <!-- Page content -->
+    <div id="page-content-wrapper">
+        <!-- Top nav -->
+        <nav class="navbar navbar-expand-lg navbar-light bg-light border-bottom">
+            <div class="container-fluid">
+                <button class="btn btn-sm btn-outline-secondary me-2" id="sidebarToggle">☰</button>
+                <span class="navbar-brand mb-0 h6">Bazos Analysis — Dashboard</span>
+                <span class="ms-auto text-muted small" id="last-scraped"></span>
+            </div>
+        </nav>
+
+        <!-- Main content -->
+        <div class="container-fluid p-4">
+
+            <!-- Brand filter -->
+            <div class="d-flex align-items-center mb-3 gap-2">
+                <label class="form-label mb-0 fw-semibold small text-muted text-uppercase">Filtr značky:</label>
+                <select id="brand-filter" class="form-select form-select-sm">
+                    <option value="">— všechny —</option>
+                </select>
+                <button class="btn btn-sm btn-outline-secondary" onclick="refreshCharts()">Obnovit</button>
+            </div>
+
+            <!-- KPI cards -->
+            <div class="row g-3 mb-4" id="kpi-row">
+                <div class="col-6 col-md-3">
+                    <div class="stat-card">
+                        <div class="value" id="kpi-total">…</div>
+                        <div class="label">Nabídek celkem</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="stat-card">
+                        <div class="value" id="kpi-brands">…</div>
+                        <div class="label">Značek</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="stat-card">
+                        <div class="value" id="kpi-avg-price">…</div>
+                        <div class="label">Průměrná cena</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="stat-card">
+                        <div class="value" id="kpi-complete">…</div>
+                        <div class="label">Kompletní data</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts row 1 -->
+            <div class="row g-3 mb-2">
+                <!-- Bar: cars per brand -->
+                <div class="col-12 col-xl-7">
+                    <div class="chart-box">
+                        <h6>Počet nabídek podle značky</h6>
+                        <canvas id="chart-brands" height="220"></canvas>
+                    </div>
+                </div>
+                <!-- Pie: fuel distribution -->
+                <div class="col-12 col-xl-5">
+                    <div class="chart-box">
+                        <h6>Typ paliva</h6>
+                        <canvas id="chart-fuel" height="220"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts row 2 -->
+            <div class="row g-3 mb-2">
+                <!-- Year distribution -->
+                <div class="col-12 col-xl-8">
+                    <div class="chart-box">
+                        <h6>Rok výroby <span class="text-muted fw-normal" id="year-filter-label"></span></h6>
+                        <canvas id="chart-years" height="180"></canvas>
+                    </div>
+                </div>
+                <!-- Price distribution -->
+                <div class="col-12 col-xl-4">
+                    <div class="chart-box">
+                        <h6>Cenové pásma (CZK)</h6>
+                        <canvas id="chart-price" height="180"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Brand detail table -->
+            <div class="chart-box mt-2">
+                <h6>Detail podle značky</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover brand-table mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Značka</th>
+                                <th class="text-end">Nabídek</th>
+                                <th class="text-end">Prům. cena</th>
+                                <th class="text-end">Prům. nájezd</th>
+                                <th class="text-end">Prům. rok</th>
+                            </tr>
+                        </thead>
+                        <tbody id="brand-table-body">
+                            <tr><td colspan="5" class="loading">Načítám…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div><!-- /container -->
+    </div><!-- /page-content-wrapper -->
+</div><!-- /wrapper -->
+
+<script>
+// ----------------------------------------------------------------
+// Helpers
+// ----------------------------------------------------------------
+const fmt = {
+    num:   n => n != null ? n.toLocaleString('cs-CZ') : '–',
+    price: n => n != null ? n.toLocaleString('cs-CZ') + ' Kč' : '–',
+    km:    n => n != null ? n.toLocaleString('cs-CZ') + ' km' : '–',
+    pct:   n => n != null ? n.toFixed(1) + ' %' : '–',
+    year:  n => n != null ? n.toFixed(1) : '–',
+};
+
+const FUEL_COLORS = {
+    'diesel':  '#ffc107',
+    'benzín':  '#28a745',
+    'benzin':  '#28a745',
+    'lpg':     '#17a2b8',
+    'elektro': '#20c997',
+};
+function fuelColor(fuel) {
+    return FUEL_COLORS[fuel?.toLowerCase()] || '#adb5bd';
+}
+
+// Chart instances (for destroy-on-refresh)
+let charts = {};
+function destroyChart(id) {
+    if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+// ----------------------------------------------------------------
+// Load overview KPIs
+// ----------------------------------------------------------------
+async function loadOverview() {
+    const data = await apiFetch('/api/stats/overview');
+    if (!data) return;
+
+    document.getElementById('kpi-total').textContent    = fmt.num(data.total_cars);
+    document.getElementById('kpi-brands').textContent   = data.total_brands ?? '–';
+    document.getElementById('kpi-avg-price').textContent = fmt.price(data.avg_price);
+    document.getElementById('kpi-complete').textContent = fmt.pct(data.complete_data_pct);
+
+    if (data.last_scraped) {
+        const d = new Date(data.last_scraped);
+        document.getElementById('last-scraped').textContent =
+            'Poslední scraping: ' + d.toLocaleDateString('cs-CZ') + ' ' + d.toLocaleTimeString('cs-CZ', {hour:'2-digit', minute:'2-digit'});
+    }
+}
+
+// ----------------------------------------------------------------
+// Brand filter dropdown
+// ----------------------------------------------------------------
+async function loadBrandFilter() {
+    const data = await apiFetch('/api/stats/brands?limit=50');
+    if (!data) return;
+
+    const sel = document.getElementById('brand-filter');
+    data.forEach(b => {
+        const opt = document.createElement('option');
+        opt.value = b.brand;
+        opt.textContent = b.brand.charAt(0).toUpperCase() + b.brand.slice(1) + ` (${fmt.num(b.count)})`;
+        sel.appendChild(opt);
+    });
+}
+
+// ----------------------------------------------------------------
+// Chart: brands bar chart
+// ----------------------------------------------------------------
+async function loadBrandsChart(brand = '') {
+    const data = await apiFetch('/api/stats/brands?limit=24');
+    if (!data) return;
+
+    destroyChart('brands');
+    const ctx = document.getElementById('chart-brands').getContext('2d');
+    charts['brands'] = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: data.map(d => d.brand),
+            datasets: [{
+                label: 'Nabídky',
+                data: data.map(d => d.count),
+                backgroundColor: data.map((d, i) =>
+                    d.brand === brand ? '#0d6efd' : `hsl(${210 + i * 12}, 65%, 58%)`
+                ),
+                borderRadius: 4,
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { beginAtZero: true, ticks: { stepSize: 50 } },
+                x: { ticks: { font: { size: 11 } } }
+            }
+        }
+    });
+
+    // Table
+    const tbody = document.getElementById('brand-table-body');
+    tbody.innerHTML = data.map(r => `
+        <tr>
+            <td class="fw-semibold">${r.brand}</td>
+            <td class="text-end">${fmt.num(r.count)}</td>
+            <td class="text-end">${fmt.price(r.avg_price)}</td>
+            <td class="text-end">${fmt.km(r.avg_mileage)}</td>
+            <td class="text-end">${fmt.year(r.avg_year)}</td>
+        </tr>
+    `).join('');
+}
+
+// ----------------------------------------------------------------
+// Chart: fuel pie
+// ----------------------------------------------------------------
+async function loadFuelChart(brand = '') {
+    const url = '/api/stats/fuel-distribution' + (brand ? `?brand=${brand}` : '');
+    const data = await apiFetch(url);
+    if (!data) return;
+
+    destroyChart('fuel');
+    const ctx = document.getElementById('chart-fuel').getContext('2d');
+    charts['fuel'] = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: data.data.map(d => d.fuel),
+            datasets: [{
+                data: data.data.map(d => d.count),
+                backgroundColor: data.data.map(d => fuelColor(d.fuel)),
+                borderWidth: 2,
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { font: { size: 12 }, padding: 12 }
+                }
+            }
+        }
+    });
+}
+
+// ----------------------------------------------------------------
+// Chart: year distribution
+// ----------------------------------------------------------------
+async function loadYearChart(brand = '') {
+    const url = '/api/stats/year-distribution' + (brand ? `?brand=${brand}` : '');
+    const data = await apiFetch(url);
+    if (!data) return;
+
+    document.getElementById('year-filter-label').textContent = brand ? `— ${brand}` : '';
+
+    destroyChart('years');
+    const ctx = document.getElementById('chart-years').getContext('2d');
+    charts['years'] = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: data.data.map(d => d.year),
+            datasets: [{
+                label: 'Vozidel',
+                data: data.data.map(d => d.count),
+                backgroundColor: '#4dabf7',
+                borderRadius: 3,
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { beginAtZero: true },
+                x: { ticks: { font: { size: 10 } } }
+            }
+        }
+    });
+}
+
+// ----------------------------------------------------------------
+// Chart: price distribution
+// ----------------------------------------------------------------
+async function loadPriceChart(brand = '') {
+    const url = '/api/stats/price-distribution' + (brand ? `?brand=${brand}&bucket=50000` : '?bucket=100000');
+    const data = await apiFetch(url);
+    if (!data) return;
+
+    destroyChart('price');
+    const ctx = document.getElementById('chart-price').getContext('2d');
+    charts['price'] = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: data.data.map(d => fmt.price(d.price_from)),
+            datasets: [{
+                label: 'Nabídky',
+                data: data.data.map(d => d.count),
+                backgroundColor: '#69db7c',
+                borderRadius: 3,
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { beginAtZero: true },
+                x: { ticks: { font: { size: 9 }, maxRotation: 45, minRotation: 30 } }
+            }
+        }
+    });
+}
+
+// ----------------------------------------------------------------
+// Shared fetch helper
+// ----------------------------------------------------------------
+async function apiFetch(url) {
+    try {
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        return await resp.json();
+    } catch (e) {
+        console.error('API error:', url, e);
+        return null;
+    }
+}
+
+// ----------------------------------------------------------------
+// Refresh all charts (used when brand filter changes)
+// ----------------------------------------------------------------
+function refreshCharts() {
+    const brand = document.getElementById('brand-filter').value;
+    loadFuelChart(brand);
+    loadYearChart(brand);
+    loadPriceChart(brand);
+    // Brand chart and table always show all brands (don't filter)
+    loadBrandsChart(brand);
+}
+
+// ----------------------------------------------------------------
+// Init
+// ----------------------------------------------------------------
+async function init() {
+    await Promise.all([
+        loadOverview(),
+        loadBrandFilter(),
+    ]);
+    refreshCharts();
+}
+
+// Sidebar toggle
+document.getElementById('sidebarToggle').addEventListener('click', () => {
+    document.getElementById('wrapper').classList.toggle('toggled');
+});
+
+// Brand filter change
+document.getElementById('brand-filter').addEventListener('change', refreshCharts);
+
+init();
+</script>
+</body>
+</html>
