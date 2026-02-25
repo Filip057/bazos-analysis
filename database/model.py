@@ -1,5 +1,5 @@
 from sqlalchemy.orm import DeclarativeBase, relationship
-from sqlalchemy import Column, Integer, String, BigInteger, ForeignKey, Float, Index
+from sqlalchemy import Column, Integer, String, BigInteger, ForeignKey, Float, Index, DateTime
 from sqlalchemy import create_engine
 from webapp.config import get_config
 
@@ -7,7 +7,7 @@ from webapp.config import get_config
 config = get_config()
 DATABASE_URI = config.DATABASE_URI
 
-# CLASSES 
+# CLASSES
 class Base(DeclarativeBase):
     pass
 # table with all brands
@@ -39,6 +39,8 @@ class Offer(Base):
         Index('idx_year_manufacture', 'year_manufacture'),
         Index('idx_mileage', 'mileage'),
         Index('idx_unique_id', 'unique_id'),
+        Index('idx_fuel', 'fuel'),
+        Index('idx_scraped_at', 'scraped_at'),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -47,12 +49,14 @@ class Offer(Base):
     year_manufacture = Column(Integer, nullable=True)
     mileage = Column(BigInteger, nullable=True)
     power = Column(Integer, nullable=True)
+    fuel = Column(String(length=50), nullable=True)   # diesel | benzín | lpg | elektro
     price = Column(Integer, nullable=True)
     url = Column(String(length=255), nullable=True)
+    scraped_at = Column(DateTime, nullable=True)       # When was this offer last seen
 
     # Derived fields
-    years_in_usage = Column(Integer, nullable=True)  # 2025 - year_manufacture
-    price_per_km = Column(Float, nullable=True)  # price / mileage
+    years_in_usage = Column(Integer, nullable=True)  # current_year - year_manufacture
+    price_per_km = Column(Float, nullable=True)      # price / mileage
     mileage_per_year = Column(Float, nullable=True)  # mileage / years_in_usage
 
     # relationships
@@ -70,8 +74,10 @@ class Car(Base):
     year_manufacture = Column(Integer)
     mileage = Column(BigInteger)
     power = Column(Integer)
+    fuel = Column(String(length=50))
     price = Column(Integer)
     url = Column(String(length=255))
+    scraped_at = Column(DateTime)
     years_in_usage = Column(Integer)
     price_per_km = Column(Float)
     mileage_per_year = Column(Float)
@@ -85,8 +91,10 @@ class Car(Base):
             'year_manufacture': self.year_manufacture,
             'mileage': self.mileage,
             'power': self.power,
+            'fuel': self.fuel,
             'price': self.price,
             'url': self.url,
+            'scraped_at': self.scraped_at.isoformat() if self.scraped_at else None,
             'years_in_usage': self.years_in_usage,
             'price_per_km': float(self.price_per_km) if self.price_per_km else None,
             'mileage_per_year': float(self.mileage_per_year) if self.mileage_per_year else None
@@ -96,12 +104,6 @@ class Car(Base):
 engine = create_engine(DATABASE_URI)
 
 # Don't connect immediately - only when actually needed
-# connection = engine.connect()  # Removed - connects lazily now
-
 def init_database():
     """Initialize database tables - call this when you actually need the database"""
     Base.metadata.create_all(engine)
-
-# REMOVED: Base.metadata.create_all(engine)
-# This was connecting to MySQL at import time, blocking usage without MySQL
-# Now you must explicitly call init_database() when you need it

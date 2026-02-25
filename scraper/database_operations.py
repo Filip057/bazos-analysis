@@ -7,11 +7,8 @@ from typing import Optional, Dict, List
 
 from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy import create_engine
-from sqlalchemy.pool import NullPool
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from database.model import Model, Brand, Offer, engine, init_database
 import aiomysql
-
 
 import os
 from webapp.config import get_config
@@ -19,11 +16,8 @@ from webapp.config import get_config
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Load configuration
+# Load configuration - single source of truth for all DB credentials
 config = get_config()
-
-# Get database password from environment
-MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD')
 
 
 # Scoped session configuration
@@ -183,12 +177,13 @@ async def fetch_data_into_database(data: List[Dict], batch_size: int = 100):
     finally:
         session.close()
 
-    # Now do async database inserts
+    # Now do async database inserts (uses config - no hardcoded credentials)
     async with aiomysql.create_pool(
-        host='localhost',
-        user='root',
-        password=os.getenv("MYSQL_PASSWORD"),
-        db='bazos_cars',
+        host=config.MYSQL_HOST,
+        port=int(config.MYSQL_PORT),
+        user=config.MYSQL_USER,
+        password=config.MYSQL_PASSWORD,
+        db=config.MYSQL_DATABASE,
         minsize=1,
         maxsize=10
     ) as pool:
@@ -213,23 +208,38 @@ async def fetch_data_into_database(data: List[Dict], batch_size: int = 100):
                         model_id = model_lookup.get((item['brand'], item['model']))
 
                         if model_id:
-                            values.append(
-                                (model_id, item['year_manufacture'], item['mileage'], item['power'],
-                                 item['price'], item['url'], years_in_usage, price_per_km, mileage_per_year, unique_id)
-                            )
+                            values.append((
+                                model_id,
+                                item['year_manufacture'],
+                                item['mileage'],
+                                item['power'],
+                                item.get('fuel'),       # NEW: fuel type
+                                item['price'],
+                                item['url'],
+                                years_in_usage,
+                                price_per_km,
+                                mileage_per_year,
+                                unique_id
+                            ))
 
                     if values:
                         sql = """
-                        INSERT INTO offers (model_id, year_manufacture, mileage, power, price, url, years_in_usage, price_per_km, mileage_per_year, unique_id)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        INSERT INTO offers (
+                            model_id, year_manufacture, mileage, power, fuel,
+                            price, url, years_in_usage, price_per_km, mileage_per_year,
+                            unique_id, scraped_at
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                         ON DUPLICATE KEY UPDATE
                             year_manufacture = VALUES(year_manufacture),
                             mileage = VALUES(mileage),
                             power = VALUES(power),
+                            fuel = VALUES(fuel),
                             price = VALUES(price),
                             years_in_usage = VALUES(years_in_usage),
                             price_per_km = VALUES(price_per_km),
-                            mileage_per_year = VALUES(mileage_per_year)
+                            mileage_per_year = VALUES(mileage_per_year),
+                            scraped_at = NOW()
                         """
                         await cur.executemany(sql, values)
                         inserted_count += len(values)
