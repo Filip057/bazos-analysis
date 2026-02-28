@@ -99,10 +99,12 @@ class PipelineRunner:
         checkpoint: Optional[CheckpointManager] = None,
         skip_db: bool = False,
         max_concurrent: int = MAX_CONCURRENT_REQUESTS,
+        url_limit: Optional[int] = None,
     ):
         self.checkpoint = checkpoint or CheckpointManager()
         self.skip_db = skip_db
         self.max_concurrent = max_concurrent
+        self.url_limit = url_limit
         self.extractor: Optional[ProductionExtractor] = None
         self._runtime_stats = {
             "saved": 0, "failed": 0, "filtered": 0, "skipped": 0
@@ -131,12 +133,13 @@ class PipelineRunner:
     # Main entry point
     # ------------------------------------------------------------------
 
-    async def run(self, brands: Optional[List[str]] = None):
+    async def run(self, brands: Optional[List[str]] = None, url_limit: Optional[int] = None):
         """
         Run the full pipeline.
 
         Args:
             brands: List of brand names to scrape, or None to scrape all.
+            url_limit: Optional limit on total URLs to process (for testing).
         """
         logger.info("=" * 65)
         logger.info(f"PIPELINE SESSION: {self.checkpoint.session_id}")
@@ -155,7 +158,7 @@ class PipelineRunner:
 
         async with aiohttp.ClientSession(connector=connector, timeout=timeout) as http_session:
             if self.skip_db:
-                await self._run_pipeline(http_session, semaphore, brands=brands, db_pool=None)
+                await self._run_pipeline(http_session, semaphore, brands=brands, db_pool=None, url_limit=url_limit or self.url_limit)
             else:
                 # Initialize DB tables (idempotent)
                 try:
@@ -174,7 +177,7 @@ class PipelineRunner:
                     maxsize=10,
                     autocommit=False,
                 ) as db_pool:
-                    await self._run_pipeline(http_session, semaphore, brands=brands, db_pool=db_pool)
+                    await self._run_pipeline(http_session, semaphore, brands=brands, db_pool=db_pool, url_limit=url_limit or self.url_limit)
 
         # Finalize
         elapsed = time.time() - start_time
@@ -195,11 +198,15 @@ class PipelineRunner:
     # Pipeline stages
     # ------------------------------------------------------------------
 
-    async def _run_pipeline(self, http_session, semaphore, brands, db_pool):
+    async def _run_pipeline(self, http_session, semaphore, brands, db_pool, url_limit=None):
         """Iterate over brands, then pages, then individual URLs."""
         brand_list = await self._resolve_brands(brands, http_session, semaphore)
         logger.info(f"Brands to process: {[b for b, _ in brand_list]}")
 
+        if url_limit:
+            logger.info(f"URL limit: {url_limit} (test mode)")
+
+        total_processed = 0
         for brand, brand_url in brand_list:
             if self.checkpoint.is_brand_done(brand):
                 logger.info(f"  Skipping brand '{brand}' (already completed in this session)")
@@ -208,15 +215,25 @@ class PipelineRunner:
 
             try:
                 logger.info(f"  Processing brand: {brand}")
-                await self._process_brand(brand, brand_url, http_session, semaphore, db_pool)
+                processed = await self._process_brand(brand, brand_url, http_session, semaphore, db_pool, url_limit=url_limit, total_processed=total_processed)
+                total_processed += processed
+
+                if url_limit and total_processed >= url_limit:
+                    logger.info(f"URL limit ({url_limit}) reached. Stopping.")
+                    break
+
                 self.checkpoint.mark_brand_done(brand)
                 logger.info(f"  Brand '{brand}' done.")
             except Exception as e:
                 # Brand-level error: log and continue with next brand
                 logger.error(f"  Brand '{brand}' failed unexpectedly: {e}. Continuing...")
 
-    async def _process_brand(self, brand, brand_url, http_session, semaphore, db_pool):
-        """Process all pages for a single brand."""
+    async def _process_brand(self, brand, brand_url, http_session, semaphore, db_pool, url_limit=None, total_processed=0):
+        """
+        Process all pages for a single brand.
+
+        Returns: Number of URLs processed in this brand.
+        """
         # Get all pages for this brand
         pages_result = await get_all_pages_for_brands(
             [(brand, brand_url)], http_session, semaphore
@@ -224,10 +241,21 @@ class PipelineRunner:
         pages = pages_result[0][1] if pages_result else []
         logger.info(f"    {brand}: {len(pages)} pages")
 
+        processed_count = 0
+
         # Process page by page (not all at once to avoid memory blowup)
         for page_url in pages:
             try:
                 detail_urls = await self._get_detail_urls(page_url, http_session, semaphore)
+
+                # Apply URL limit if specified
+                if url_limit:
+                    remaining = url_limit - (total_processed + processed_count)
+                    if remaining <= 0:
+                        logger.info(f"    URL limit reached for brand '{brand}'. Stopping.")
+                        break
+                    detail_urls = detail_urls[:remaining]
+
                 # Process detail URLs in small concurrent chunks
                 for chunk_start in range(0, len(detail_urls), CHUNK_SIZE):
                     chunk = detail_urls[chunk_start:chunk_start + CHUNK_SIZE]
@@ -237,9 +265,12 @@ class PipelineRunner:
                     ]
                     # return_exceptions=True ensures one failure doesn't cancel the others
                     await asyncio.gather(*tasks, return_exceptions=True)
+                    processed_count += len(chunk)
             except Exception as e:
                 # Page-level error: log and continue with next page
                 logger.error(f"    Page {page_url} failed: {e}. Skipping page.")
+
+        return processed_count
 
     async def _get_detail_urls(self, page_url, http_session, semaphore) -> List[str]:
         """Extract all detail listing URLs from a single page."""
@@ -464,14 +495,14 @@ Examples:
   # Scrape multiple brands
   python3 -m pipeline.runner --brands skoda volkswagen audi
 
+  # Test mode (no DB, limit 10 URLs)
+  python3 -m pipeline.runner --brands skoda --skip-db --limit 10
+
   # Auto-resume last incomplete session
   python3 -m pipeline.runner --resume
 
   # Resume specific session
   python3 -m pipeline.runner --resume 20250225_143000
-
-  # Test mode (no DB writes)
-  python3 -m pipeline.runner --brands skoda --skip-db
 
   # List all sessions
   python3 -m pipeline.runner --list-sessions
@@ -487,6 +518,7 @@ Examples:
         help="Resume last incomplete session, or specify a session ID",
     )
     parser.add_argument("--skip-db", action="store_true", help="Skip DB writes (test mode)")
+    parser.add_argument("--limit", type=int, metavar="N", help="Limit total URLs to process (for testing)")
     parser.add_argument("--list-sessions", action="store_true", help="List all pipeline sessions")
 
     args = parser.parse_args()
@@ -497,10 +529,10 @@ Examples:
 
     # Build runner
     if args.resume == "last":
-        runner = PipelineRunner.resume_last(skip_db=args.skip_db)
+        runner = PipelineRunner.resume_last(skip_db=args.skip_db, url_limit=args.limit)
     elif args.resume:
-        runner = PipelineRunner.resume(args.resume, skip_db=args.skip_db)
+        runner = PipelineRunner.resume(args.resume, skip_db=args.skip_db, url_limit=args.limit)
     else:
-        runner = PipelineRunner(skip_db=args.skip_db)
+        runner = PipelineRunner(skip_db=args.skip_db, url_limit=args.limit)
 
     asyncio.run(runner.run(brands=args.brands))
