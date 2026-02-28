@@ -151,7 +151,14 @@ async def get_all_pages_for_brands(brand_url_list: List[Tuple[str, str]], sessio
         try:
             num_of_objs_text = soup.find('div', class_='inzeratynadpis').text.split('z ')[1].strip()
             num_of_objs = int(num_of_objs_text.replace(' ', ''))
-            pages = [f"{base_url}{x}/" for x in range(20, num_of_objs, 20)]
+
+            # Bazos has a hard limit of 20,000 offers (offset cannot exceed 20000)
+            max_offset = min(num_of_objs, 20000)
+            pages = [f"{base_url}{x}/" for x in range(20, max_offset, 20)]
+
+            if num_of_objs > 20000:
+                logger.info(f"{brand}: Total {num_of_objs} offers, but limited to first 20,000 (Bazos limit)")
+
             return (brand, pages)
         except (AttributeError, IndexError, ValueError) as e:
             logger.warning(f"Error parsing pages for {brand}: {e}")
