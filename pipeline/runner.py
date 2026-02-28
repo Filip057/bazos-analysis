@@ -244,9 +244,10 @@ class PipelineRunner:
         processed_count = 0
 
         # Process page by page (not all at once to avoid memory blowup)
-        for page_url in pages:
+        for page_idx, page_url in enumerate(pages, 1):
             try:
                 detail_urls = await self._get_detail_urls(page_url, http_session, semaphore)
+                logger.info(f"    Page {page_idx}/{len(pages)}: Found {len(detail_urls)} offers")
 
                 # Apply URL limit if specified
                 if url_limit:
@@ -266,6 +267,7 @@ class PipelineRunner:
                     # return_exceptions=True ensures one failure doesn't cancel the others
                     await asyncio.gather(*tasks, return_exceptions=True)
                     processed_count += len(chunk)
+                    logger.info(f"    Processed {processed_count} offers total")
             except Exception as e:
                 # Page-level error: log and continue with next page
                 logger.error(f"    Page {page_url} failed: {e}. Skipping page.")
