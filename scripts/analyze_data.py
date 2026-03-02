@@ -11,7 +11,6 @@ sys.path.insert(0, str(project_root))
 
 from sqlalchemy import create_engine, text
 from webapp.config import get_config
-import pandas as pd
 
 config = get_config()
 engine = create_engine(config.DATABASE_URI)
