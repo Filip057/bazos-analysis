@@ -84,6 +84,52 @@ TEST_CASES = [
         'context': "m atmosferickým motorem g160 (118 Kw, kroutící moment 200 Nm), kt",
         'expected_mileage': None,  # 118 Kw is POWER!
     },
+
+    # NEW TESTS from Claude chat analysis (40% improvement, 60% still failing)
+
+    # MILEAGE: "N tis." format (Priority 1 - 16× occurrences)
+    {
+        'id': 89,
+        'context': "najeto 56 tis.",
+        'expected_mileage': 56000,
+    },
+    {
+        'id': 113,
+        'context': "Mazda 2 1.4i 111tkm",
+        'expected_mileage': 111000,
+    },
+    {
+        'id': 70,
+        'context': "Mazda 6 2.2D,rok 04.2015,185 tis. km",
+        'expected_year': 2015,
+        'expected_mileage': 185000,
+    },
+
+    # YEAR: ",YYYY," format
+    {
+        'id': 61,
+        'context': "MAZDA 6 2.0i 114KW,2011,KŮŽE,VÝHŘEV",
+        'expected_year': 2011,
+    },
+
+    # YEAR: "MM/YYYY" standalone (without r.v.)
+    {
+        'id': 156,
+        'context': "Mazda CX-5, Takumi, 12/2016",
+        'expected_year': 2016,
+    },
+    {
+        'id': 84,
+        'context': "MAZDA CX-5 r.v.01/2022 NAVI,LED",
+        'expected_year': 2022,  # This should already work
+    },
+
+    # YEAR: "rok MM.YYYY" format
+    {
+        'id': 70,
+        'context': "Mazda 6 2.2D,rok 04.2015,1. Majitel",
+        'expected_year': 2015,
+    },
 ]
 
 def test_patterns():
