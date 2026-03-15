@@ -36,6 +36,10 @@ class ContextAwarePatterns:
         re.compile(r'(?:rok\s+výroby|r\.?\s?v\.?|výroba|vyrobeno)\s*[:.]?\s*(\d{4})', re.IGNORECASE),
         re.compile(r'(\d{4})\s*(?:rok\s+výroby|r\.?\s?v\.?)', re.IGNORECASE),
         re.compile(r'rč\.?\s*(\d{4})', re.IGNORECASE),  # "rč. 2016"
+        # NEW: Registration/in-service dates (do provozu, v provozu od, uveden do provozu)
+        re.compile(r'(?:do\s+provozu|v\s+provozu|ve\s+provozu)\s*(?:od)?\s*[:.]?\s*(?:\d{1,2}[/.])?\s*(?:\d{1,2}[/.])?\s*(\d{4})', re.IGNORECASE),  # "do provozu 10.6.2013", "v provozu od: 8/2009"
+        re.compile(r'(?:uveden|uvedena|uvedeno|zařazen|zařazena|zařazeno)\s+(?:do\s+provozu|k\s+provozu)\s*[:.]?\s*(?:\d{1,2}[/.])?\s*(?:\d{1,2}[/.])?\s*(\d{4})', re.IGNORECASE),  # "uveden do provozu 05/2017"
+        re.compile(r'(?:první|1\.)\s+(?:registrace|majitel|provoz)\s*[:.]?\s*(?:\d{1,2}[/.])?\s*(?:\d{1,2}[/.])?\s*(\d{4})', re.IGNORECASE),  # "první registrace 2013", "1. provoz 2015"
     ]
 
     # MEDIUM confidence - context suggests production year
@@ -63,24 +67,24 @@ class ContextAwarePatterns:
     # MILEAGE PATTERNS - Context-aware (EXPANDED: support all user variations)
 
     MILEAGE_HIGH_CONFIDENCE = [
-        # With explicit context (najeto, nájezd, etc.) + km
-        re.compile(r'(?:najeto|nájezd|km\s+celkem|počet\s+km)\s*[:.]?\s*((\d{1,3}(?:[\s._]?\d{3})+)\s?km)', re.IGNORECASE),  # "najeto 200 000 km"
+        # With explicit context (najeto, nájezd, aktuální, skutečných, etc.) + km
+        re.compile(r'(?:najeto|nájezd|aktuální\s+nájezd|skutečných|počet\s+km|km\s+celkem)\s*(?:skutečných|jasně|doložených|je)?\s*[:.]?\s*((\d{1,3}(?:[\s._]?\d{3})+)\s?km)', re.IGNORECASE),  # "najeto 200 000 km", "najeto: 201.455 km", "NAJETO SKUTEČNÝCH 142.981KM", "aktuální nájezd je 59.900 km"
         re.compile(r'((\d{1,3}(?:[\s._]?\d{3})+)\s?km)\s+(?:najeto|celkem)', re.IGNORECASE),  # "200 000 km najeto"
 
         # With explicit context + separator BUT NO km (needs explicit "najeto" context)
-        re.compile(r'(?:najeto|nájezd)\s*[:.]?\s*((\d{1,3}[\s._]\d{3}(?:[\s._]\d{3})?)(?!\s?km))', re.IGNORECASE),  # "najeto 123 000", "najeto 123.000"
+        re.compile(r'(?:najeto|nájezd|aktuální\s+nájezd)\s*(?:skutečných|je)?\s*[:.]?\s*((\d{1,3}[\s._]\d{3}(?:[\s._]\d{3})?)(?!\s?km))', re.IGNORECASE),  # "najeto 123 000", "najeto 123.000"
 
         # With thousands abbreviations + context
-        re.compile(r'(?:najeto|nájezd)\s*[:.]?\s*((\d{1,3}(?:[.,]\d+)?)\s?(?:tis|tisíc)\.?\s?(?:km)?)', re.IGNORECASE),  # "najeto 150 tis", "najeto 150tis km"
-        re.compile(r'(?:najeto|nájezd)\s*[:.]?\s*((\d{1,3}(?:[.,]\d+)?)\s?k(?:\s?km)?)', re.IGNORECASE),  # "najeto 150k", "najeto150k km"
-        re.compile(r'(?:najeto|nájezd)\s*[:.]?\s*((\d{1,3}(?:[.,]\d+)?)\s?t\.?(?:\s?km)?)', re.IGNORECASE),  # "najeto 150t", "najeto 150t km"
+        re.compile(r'(?:najeto|nájezd|aktuální\s+nájezd)\s*[:.]?\s*((\d{1,3}(?:[.,]\d+)?)\s?(?:tis|tisíc)\.?\s?(?:km)?)', re.IGNORECASE),  # "najeto 150 tis", "najeto 150tis km"
+        re.compile(r'(?:najeto|nájezd|aktuální\s+nájezd)\s*[:.]?\s*((\d{1,3})\s?k(?:\s?km)?)', re.IGNORECASE),  # "najeto 150k", "najeto150k km" - NOTE: no decimal allowed here (to avoid matching "201.455 km")
+        re.compile(r'(?:najeto|nájezd|aktuální\s+nájezd)\s*[:.]?\s*((\d{1,3})\s?t\.?(?:\s?km)?)', re.IGNORECASE),  # "najeto 150t", "najeto 150t km" - NOTE: no decimal allowed
 
         # With placeholder formats + context
-        re.compile(r'(?:najeto|nájezd)\s*[:.]?\s*((\d{1,3})\s?xxx(?:\s?km)?)', re.IGNORECASE),  # "najeto 150xxx", "najeto150xxx km"
-        re.compile(r'(?:najeto|nájezd)\s*[:.]?\s*((\d{1,3})\s?\*{3}(?:\s?km)?)', re.IGNORECASE),  # "najeto 150***", "najeto150*** km"
+        re.compile(r'(?:najeto|nájezd|aktuální\s+nájezd)\s*[:.]?\s*((\d{1,3})\s?xxx(?:\s?km)?)', re.IGNORECASE),  # "najeto 150xxx", "najeto150xxx km"
+        re.compile(r'(?:najeto|nájezd|aktuální\s+nájezd)\s*[:.]?\s*((\d{1,3})\s?\*{3}(?:\s?km)?)', re.IGNORECASE),  # "najeto 150***", "najeto150*** km"
 
-        # Standard format + context (no thousands separator)
-        re.compile(r'(?:najeto|nájezd)\s*[:.]?\s*((\d{5,6})(?:\s?km)?)', re.IGNORECASE),  # "najeto 150000", "najeto150000 km"
+        # Standard format + context (no thousands separator) - EXPANDED to include 4+ digits
+        re.compile(r'(?:najeto|nájezd|aktuální\s+nájezd)\s+(?:skutečných|je)?\s*[:.]?\s*((\d{4,6})(?:\s?km)?)', re.IGNORECASE),  # "najeto 150000", "najeto 54000 km", "aktuální nájezd je 59900"
     ]
 
     MILEAGE_MEDIUM_CONFIDENCE = [
@@ -195,7 +199,11 @@ class ContextAwarePatterns:
         return self._deduplicate_matches(matches)
 
     def find_mileage(self, text: str) -> List[Match]:
-        """Find mileage with confidence scoring"""
+        """Find mileage with confidence scoring
+
+        When multiple mileage values are found, returns the HIGHEST value
+        (as per user requirement: "u mileage vždy použít tu vyšší hodnotu")
+        """
         matches = []
         excluded_positions = set()
 
@@ -233,7 +241,16 @@ class ContextAwarePatterns:
                             pattern_type='standard'
                         ))
 
-        return self._deduplicate_matches(matches)
+        # Deduplicate matches
+        deduplicated = self._deduplicate_matches(matches)
+
+        # CRITICAL: If multiple mileage values found, pick the HIGHEST one
+        # (User requirement: "vždy použít tu vyšší hodnotu")
+        if len(deduplicated) > 1:
+            # Return the match with the highest mileage value
+            return [max(deduplicated, key=lambda m: m.value)]
+
+        return deduplicated
 
     def find_power(self, text: str) -> List[Match]:
         """Find power with confidence scoring"""
