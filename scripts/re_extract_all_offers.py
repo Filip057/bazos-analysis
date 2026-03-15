@@ -3,10 +3,14 @@
 Re-extract data from all offers using improved extraction patterns
 
 This script:
-1. Fetches all offers from the database
-2. Re-extracts data using improved patterns
-3. Updates the database with new extraction results
-4. Shows before/after comparison
+1. Fetches all offers (URLs) from the database
+2. SCRAPES fresh title + description from each URL
+3. Re-extracts data using improved patterns
+4. Updates the database with new extraction results
+5. Shows before/after comparison
+
+NOTE: This script SCRAPES fresh data because title/description are NOT stored in DB.
+      For 1049 offers, expect ~10-15 minutes runtime.
 """
 import sys
 import os
@@ -16,8 +20,35 @@ import pymysql
 from webapp.config import get_config
 from ml.production_extractor import ProductionExtractor
 import time
+import requests
+from bs4 import BeautifulSoup
 
 config = get_config()
+
+def scrape_offer(url):
+    """Scrape title and description from Bazos offer URL"""
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+
+        soup = BeautifulSoup(response.content, 'html.parser')
+
+        # Extract title (headline)
+        title_elem = soup.find('h1', class_='nadpisdetail')
+        title = title_elem.get_text(strip=True) if title_elem else ''
+
+        # Extract description
+        desc_elem = soup.find('div', class_='popisdetail')
+        description = desc_elem.get_text(strip=True) if desc_elem else ''
+
+        return title, description
+
+    except Exception as e:
+        return None, None
 
 def re_extract_all():
     """Re-extract all offers with improved patterns"""
@@ -42,13 +73,15 @@ def re_extract_all():
     total_offers = cursor.fetchone()[0]
     print(f"\nTotal offers to re-extract: {total_offers}")
 
-    # Fetch all offers
-    print("\n📥 Fetching offers from database...")
+    # Fetch all offers (URL only, will scrape fresh data)
+    print("\n📥 Fetching offer URLs from database...")
     cursor.execute("""
-        SELECT id, title, description, url
+        SELECT id, url
         FROM offers
+        WHERE url IS NOT NULL
     """)
     offers = cursor.fetchall()
+    print(f"Found {len(offers)} offers with URLs")
 
     # Statistics
     stats = {
@@ -61,6 +94,7 @@ def re_extract_all():
         'mileage_kept': 0,
         'power_kept': 0,
         'fuel_kept': 0,
+        'scrape_failed': 0,    # Failed to scrape URL
         'errors': 0
     }
 
@@ -68,10 +102,11 @@ def re_extract_all():
     print("🔧 Initializing improved extractor...")
     extractor = ProductionExtractor()
 
-    print(f"\n🚀 Starting re-extraction...\n")
+    print(f"\n🚀 Starting scraping + re-extraction...")
+    print(f"   (Scraping {len(offers)} URLs, ETA: ~{len(offers)*0.5/60:.0f} minutes)\n")
     start_time = time.time()
 
-    for idx, (offer_id, title, description, url) in enumerate(offers, 1):
+    for idx, (offer_id, url) in enumerate(offers, 1):
         try:
             # Get current values
             cursor.execute("""
@@ -82,9 +117,20 @@ def re_extract_all():
             current = cursor.fetchone()
             old_year, old_mileage, old_power, old_fuel = current
 
+            # Scrape fresh data
+            title, description = scrape_offer(url)
+
+            if title is None:
+                stats['scrape_failed'] += 1
+                stats['total'] += 1
+                continue
+
             # Re-extract
             full_text = f"{title}\n{description}" if description else title
             result = extractor.extract(full_text, car_id=str(offer_id))
+
+            # Rate limiting (be nice to Bazos)
+            time.sleep(0.3)  # 300ms between requests
 
             # Extract new values
             new_year = result['year']
@@ -153,6 +199,7 @@ def re_extract_all():
     print("RE-EXTRACTION COMPLETE")
     print(f"{'='*70}")
     print(f"  Total processed:     {stats['total']}")
+    print(f"  Scrape failed:       {stats['scrape_failed']} (URL not accessible)")
     print(f"\n  IMPROVEMENTS (NULL → value):")
     print(f"    Year improved:       {stats['year_improved']}")
     print(f"    Mileage improved:    {stats['mileage_improved']}")
@@ -164,7 +211,7 @@ def re_extract_all():
     print(f"    Power kept:          {stats['power_kept']}")
     print(f"    Fuel kept:           {stats['fuel_kept']}")
     print(f"\n  Errors:              {stats['errors']}")
-    print(f"  Time taken:          {elapsed:.1f}s ({stats['total']/elapsed:.1f} offers/sec)")
+    print(f"  Time taken:          {elapsed:.1f}s ({elapsed/60:.1f} min, {stats['total']/elapsed:.1f} offers/sec)")
     print(f"{'='*70}\n")
 
     # Show new completeness
