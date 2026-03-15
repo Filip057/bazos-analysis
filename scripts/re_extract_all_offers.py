@@ -57,6 +57,10 @@ def re_extract_all():
         'mileage_improved': 0,
         'power_improved': 0,
         'fuel_improved': 0,
+        'year_kept': 0,        # Existing value kept (prevented regression)
+        'mileage_kept': 0,
+        'power_kept': 0,
+        'fuel_kept': 0,
         'errors': 0
     }
 
@@ -88,7 +92,14 @@ def re_extract_all():
             new_power = result['power']
             new_fuel = result['fuel']
 
-            # Update database
+            # CRITICAL FIX: Keep existing values if new extraction returns None
+            # (prevents regression where good data is replaced with NULL)
+            final_year = new_year if new_year is not None else old_year
+            final_mileage = new_mileage if new_mileage is not None else old_mileage
+            final_power = new_power if new_power is not None else old_power
+            final_fuel = new_fuel if new_fuel is not None else old_fuel
+
+            # Update database (only update if new value is better)
             cursor.execute("""
                 UPDATE offers
                 SET year_manufacture = %s,
@@ -96,9 +107,9 @@ def re_extract_all():
                     power = %s,
                     fuel = %s
                 WHERE id = %s
-            """, (new_year, new_mileage, new_power, new_fuel, offer_id))
+            """, (final_year, final_mileage, final_power, final_fuel, offer_id))
 
-            # Track improvements
+            # Track improvements (only count NEW extractions, not kept values)
             stats['total'] += 1
             if old_year is None and new_year is not None:
                 stats['year_improved'] += 1
@@ -108,6 +119,16 @@ def re_extract_all():
                 stats['power_improved'] += 1
             if old_fuel is None and new_fuel is not None:
                 stats['fuel_improved'] += 1
+
+            # Track kept values (regression prevention)
+            if old_year is not None and new_year is None:
+                stats['year_kept'] += 1
+            if old_mileage is not None and new_mileage is None:
+                stats['mileage_kept'] += 1
+            if old_power is not None and new_power is None:
+                stats['power_kept'] += 1
+            if old_fuel is not None and new_fuel is None:
+                stats['fuel_kept'] += 1
 
             # Progress indicator
             if idx % 50 == 0:
@@ -132,11 +153,17 @@ def re_extract_all():
     print("RE-EXTRACTION COMPLETE")
     print(f"{'='*70}")
     print(f"  Total processed:     {stats['total']}")
-    print(f"  Year improved:       {stats['year_improved']} (NEW extractions)")
-    print(f"  Mileage improved:    {stats['mileage_improved']} (NEW extractions)")
-    print(f"  Power improved:      {stats['power_improved']} (NEW extractions)")
-    print(f"  Fuel improved:       {stats['fuel_improved']} (NEW extractions)")
-    print(f"  Errors:              {stats['errors']}")
+    print(f"\n  IMPROVEMENTS (NULL → value):")
+    print(f"    Year improved:       {stats['year_improved']}")
+    print(f"    Mileage improved:    {stats['mileage_improved']}")
+    print(f"    Power improved:      {stats['power_improved']}")
+    print(f"    Fuel improved:       {stats['fuel_improved']}")
+    print(f"\n  REGRESSION PREVENTION (kept existing values):")
+    print(f"    Year kept:           {stats['year_kept']} (extraction failed, kept old value)")
+    print(f"    Mileage kept:        {stats['mileage_kept']}")
+    print(f"    Power kept:          {stats['power_kept']}")
+    print(f"    Fuel kept:           {stats['fuel_kept']}")
+    print(f"\n  Errors:              {stats['errors']}")
     print(f"  Time taken:          {elapsed:.1f}s ({stats['total']/elapsed:.1f} offers/sec)")
     print(f"{'='*70}\n")
 

@@ -50,6 +50,10 @@ class ContextAwarePatterns:
     YEAR_MEDIUM_CONFIDENCE = [
         re.compile(r'(?:^|\s)(\d{4})\s*(?:km|kw|tdi|tsi)', re.IGNORECASE),  # "2016, 150000 km"
         re.compile(r'(?:škoda|vw|audi|bmw|toyota|ford|mazda)\s+\w+\s+(\d{4})', re.IGNORECASE),  # "Škoda Octavia 2016"
+        # GAP ANALYSIS FIX: Comma-separated year ",YYYY," (from analysis: ID 61)
+        re.compile(r',\s*(19[89]\d|20[0-2]\d)\s*,', re.IGNORECASE),  # ",2011," (year isolated by commas)
+        # GAP ANALYSIS FIX: Standalone MM/YYYY without "r.v." prefix (IDs 156, 84, 108)
+        re.compile(r'(?:0[1-9]|1[0-2])/(19[89]\d|20[0-2]\d)\b', re.IGNORECASE),  # "12/2016", "01/2022"
     ]
 
     # NEGATIVE patterns - EXCLUDE these (STK, service, repairs)
@@ -109,6 +113,9 @@ class ContextAwarePatterns:
         re.compile(r'\b((\d{1,3}(?:[.,]\d+)?)\s?(?:tis|tisíc)\.?)(?!\w)', re.IGNORECASE),  # "150tis", "150 tis."
         re.compile(r'\b((\d{1,3}(?:[.,]\d+)?)k)(?!w|m|\w)', re.IGNORECASE),  # "150k" (not kW, km)
         re.compile(r'\b((\d{1,3}(?:[.,]\d+)?)\s?t)(?!d|s|i|e|a|\w)', re.IGNORECASE),  # "150t" (not TDI, TSI)
+
+        # GAP ANALYSIS FIX: "Ntkm" format (111tkm, 150tkm) - PRIORITY 1 (16× occurrences)
+        re.compile(r'\b((\d{1,3})t\.?km)\b', re.IGNORECASE),  # "111tkm", "150tkm"
 
         # Placeholder formats WITHOUT km
         re.compile(r'\b((\d{1,3})\s?xxx)(?!\w)', re.IGNORECASE),  # "150xxx", "150 xxx"
