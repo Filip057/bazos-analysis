@@ -74,9 +74,9 @@ with engine.connect() as conn:
         WHERE year_manufacture IS NOT NULL
     """))
     row = result.fetchone()
-    print(f"Min year:         {row[0]}")
-    print(f"Max year:         {row[1]}")
-    print(f"Avg year:         {row[2]:.1f}")
+    print(f"Min year:         {row[0] or 'N/A'}")
+    print(f"Max year:         {row[1] or 'N/A'}")
+    print(f"Avg year:         {row[2]:.1f if row[2] else 'N/A'}")
     print(f"Before 1950:      {row[3]} (likely errors)")
     print(f"Future (>2026):   {row[4]} (likely errors)")
 
@@ -94,9 +94,9 @@ with engine.connect() as conn:
         WHERE price IS NOT NULL
     """))
     row = result.fetchone()
-    print(f"Min price:        {row[0]:,} Kč")
-    print(f"Max price:        {row[1]:,} Kč")
-    print(f"Avg price:        {row[2]:,.0f} Kč")
+    print(f"Min price:        {f'{row[0]:,}' if row[0] else 'N/A'} Kč")
+    print(f"Max price:        {f'{row[1]:,}' if row[1] else 'N/A'} Kč")
+    print(f"Avg price:        {f'{row[2]:,.0f}' if row[2] else 'N/A'} Kč")
     print(f"< 1,000 Kč:       {row[3]} (likely errors)")
     print(f"> 10M Kč:         {row[4]} (likely errors)")
 
@@ -114,9 +114,9 @@ with engine.connect() as conn:
         WHERE mileage IS NOT NULL
     """))
     row = result.fetchone()
-    print(f"Min mileage:      {row[0]:,} km")
-    print(f"Max mileage:      {row[1]:,} km")
-    print(f"Avg mileage:      {row[2]:,.0f} km")
+    print(f"Min mileage:      {f'{row[0]:,}' if row[0] else 'N/A'} km")
+    print(f"Max mileage:      {f'{row[1]:,}' if row[1] else 'N/A'} km")
+    print(f"Avg mileage:      {f'{row[2]:,.0f}' if row[2] else 'N/A'} km")
     print(f"Zero mileage:     {row[3]} (new cars)")
     print(f"> 1M km:          {row[4]} (likely errors)")
 
