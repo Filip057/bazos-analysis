@@ -40,6 +40,10 @@ class ContextAwarePatterns:
         re.compile(r'(?:do\s+provozu|v\s+provozu|ve\s+provozu)\s*(?:od)?\s*[:.]?\s*(?:\d{1,2}[/.])?\s*(?:\d{1,2}[/.])?\s*(\d{4})', re.IGNORECASE),  # "do provozu 10.6.2013", "v provozu od: 8/2009"
         re.compile(r'(?:uveden|uvedena|uvedeno|zařazen|zařazena|zařazeno)\s+(?:do\s+provozu|k\s+provozu)\s*[:.]?\s*(?:\d{1,2}[/.])?\s*(?:\d{1,2}[/.])?\s*(\d{4})', re.IGNORECASE),  # "uveden do provozu 05/2017"
         re.compile(r'(?:první|1\.)\s+(?:registrace|majitel|provoz)\s*[:.]?\s*(?:\d{1,2}[/.])?\s*(?:\d{1,2}[/.])?\s*(\d{4})', re.IGNORECASE),  # "první registrace 2013", "1. provoz 2015"
+        # GAP ANALYSIS FIX: "r.v. MM/YYYY", "rok výroby MM/YYYY" formats
+        re.compile(r'(?:r\.?\s?v\.?|rok\s+výr(?:oby)?\.?)\s*[:.]?\s*\d{1,2}/(\d{4})', re.IGNORECASE),  # "r.v.01/2022", "rok výr. 12/2010"
+        re.compile(r'(?:první|1\.?)\s*(?:registrace|reg\.?)\s*[:.]?\s*\d{1,2}/(\d{4})', re.IGNORECASE),  # "1.reg.2012", "první registrace 8/2016"
+        re.compile(r'\d{1,2}/(\d{4})\s*\([^)]*(?:německo|austria|švýcarsko|francie|itálie)[^)]*\)', re.IGNORECASE),  # "08/2016 (Německo)"
     ]
 
     # MEDIUM confidence - context suggests production year
@@ -88,9 +92,9 @@ class ContextAwarePatterns:
     ]
 
     MILEAGE_MEDIUM_CONFIDENCE = [
-        # Standard formats WITH km
-        re.compile(r'\b((\d{1,3}(?:[\s._]\d{3})+)\s?km)\b', re.IGNORECASE),  # "150 000 km", "150.000 km", "150_000km"
-        re.compile(r'\b((\d{5,6})\s?km)\b', re.IGNORECASE),  # "150000 km", "150000km"
+        # Standard formats WITH km (CRITICAL FIX: exclude kW false positives!)
+        re.compile(r'\b((\d{1,3}(?:[\s._]\d{3})+)\s?km)(?!.*\bkw\b)', re.IGNORECASE),  # "150 000 km", "150.000 km", "150_000km" (not if "kw" follows)
+        re.compile(r'\b((\d{5,6})\s?km)(?!.*\bkw\b)', re.IGNORECASE),  # "150000 km", "150000km" (not if followed by kW)
 
         # Thousands abbreviations WITH km
         re.compile(r'\b((\d{1,3}(?:[.,]\d+)?)\s?(?:tis|tisíc)\.?\s?km)', re.IGNORECASE),  # "150 tis km", "150tis. km"
@@ -109,6 +113,9 @@ class ContextAwarePatterns:
         # Placeholder formats WITHOUT km
         re.compile(r'\b((\d{1,3})\s?xxx)(?!\w)', re.IGNORECASE),  # "150xxx", "150 xxx"
         re.compile(r'\b((\d{1,3})\s?\*{3})(?!\w)', re.IGNORECASE),  # "150***", "150 ***"
+
+        # GAP ANALYSIS FIX: Dot-separated thousands WITHOUT km (56.000, 196.395, etc.)
+        re.compile(r'\b((\d{2,3}\.\d{3}(?:\.\d{3})?))\s*(?!km|kw)\b', re.IGNORECASE),  # "56.000", "196.395" (European format)
 
         # Standard formats WITHOUT km (with separator) - must have 5+ total digits to be mileage
         re.compile(r'\b((\d{1,3}[\s._]\d{3}(?:[\s._]\d{3})?))(?!\s?k[mw]|\w)', re.IGNORECASE),  # "150 000", "150.000" (not followed by km/kw)
