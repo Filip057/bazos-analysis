@@ -754,7 +754,7 @@ class WorkflowManager:
             print()
 
             self.run_command(
-                "python3 -m ml.train_ml_model --data temp_combined_training.json --analyze-only",
+                'python3 -m ml.train_ml_model --data "temp_combined_training.json" --analyze-only',
                 "Analyzing combined training data"
             )
 
@@ -794,7 +794,7 @@ class WorkflowManager:
 
             # Run quick check
             self.run_command(
-                f"python3 scripts/quick_check_alignment.py {temp_file}",
+                f'python3 scripts/quick_check_alignment.py "{temp_file}"',
                 "Quick check for misaligned entities"
             )
 
