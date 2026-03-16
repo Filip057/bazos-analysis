@@ -715,10 +715,11 @@ class WorkflowManager:
         print("Options:")
         print("  1. Check original labeled data")
         print("  2. Check all training data sources combined")
-        print("  3. Back to main menu")
+        print("  3. Quick check for misaligned entities (combined data)")
+        print("  4. Back to main menu")
         print()
 
-        choice = input("Choose option (1-3): ").strip()
+        choice = input("Choose option (1-4): ").strip()
 
         if choice == '1':
             self.run_command(
@@ -757,9 +758,48 @@ class WorkflowManager:
                 "Analyzing combined training data"
             )
 
-            # Clean up temp file
-            if temp_file.exists():
-                temp_file.unlink()
+            # Clean up temp file (DISABLED - keep for training!)
+            # if temp_file.exists():
+            #     temp_file.unlink()
+            print(f"\n💾 Temp file saved: {temp_file}")
+            print(f"   Use this for training!")
+        elif choice == '3':
+            # Quick check for misaligned entities
+            print()
+            print("Quick checking for misaligned entities...")
+            print()
+
+            # Combine all sources first
+            combined_data = []
+            for filename in files_to_check:
+                try:
+                    with open(self.project_root / filename, 'r') as f:
+                        data = json.load(f)
+                        if isinstance(data, list):
+                            for item in data:
+                                if isinstance(item, (list, tuple)):
+                                    combined_data.append(item)
+                                elif isinstance(item, dict) and 'data' in item:
+                                    combined_data.append(item['data'])
+                except Exception as e:
+                    print(f"  ⚠️  Could not read {filename}: {e}")
+
+            # Save temporarily
+            temp_file = self.project_root / 'temp_combined_training.json'
+            with open(temp_file, 'w') as f:
+                json.dump(combined_data, f, ensure_ascii=False, indent=2)
+
+            print(f"  Combined {len(combined_data)} examples from all sources")
+            print()
+
+            # Run quick check
+            self.run_command(
+                f"python3 scripts/quick_check_alignment.py {temp_file}",
+                "Quick check for misaligned entities"
+            )
+
+            print()
+            print("💡 To fix misaligned entities, use Option 18 (Fix Misaligned Entities)")
         else:
             return
 
@@ -902,6 +942,215 @@ class WorkflowManager:
 
         input("\nPress Enter to continue...")
 
+    def fix_misaligned_entities(self):
+        """Option 18: Fix misaligned entities in training data"""
+        self.print_header()
+        print("🔧 FIX MISALIGNED ENTITIES")
+        print("-" * 70)
+        print()
+        print("This fixes [W030] warnings during training:")
+        print("  - Validates all entity positions")
+        print("  - Auto-fixes misaligned entities (80-90% success rate)")
+        print("  - Removes unfixable entities")
+        print()
+        print("Strategies:")
+        print("  ✓ Whitespace trimming")
+        print("  ✓ Pattern search nearby (±10 chars)")
+        print("  ✓ Entity-type heuristics (YEAR/MILEAGE/POWER/FUEL)")
+        print()
+
+        # Show available training files
+        training_files = []
+        for pattern in ['*training*.json', '*combined*.json', 'temp_*.json']:
+            training_files.extend(self.project_root.glob(pattern))
+
+        if not training_files:
+            print("❌ No training data files found!")
+            print()
+            print("Run 'Check Training Data Quality' to create temp_combined_training.json")
+            input("\nPress Enter to continue...")
+            return
+
+        print("Available training files:")
+        for i, file in enumerate(training_files, 1):
+            try:
+                with open(file, 'r') as f:
+                    data = json.load(f)
+                    count = len(data) if isinstance(data, list) else 0
+                    print(f"  {i}. {file.name} ({count} examples)")
+            except:
+                print(f"  {i}. {file.name}")
+
+        print()
+        input_file = input("Enter input filename (default: temp_combined_training.json): ").strip()
+        if not input_file:
+            input_file = "temp_combined_training.json"
+
+        input_path = self.project_root / input_file
+        if not input_path.exists():
+            print(f"❌ File not found: {input_file}")
+            input("\nPress Enter to continue...")
+            return
+
+        output_file = input("Enter output filename (default: training_data_fixed.json): ").strip()
+        if not output_file:
+            output_file = "training_data_fixed.json"
+
+        print()
+        print("Options:")
+        print("  1. Analyze only (check for issues)")
+        print("  2. Analyze + Fix (auto-fix misaligned entities)")
+        print("  3. Cancel")
+        print()
+
+        choice = input("Choose option (1-3): ").strip()
+
+        if choice == '1':
+            self.run_command(
+                f'python3 scripts/validate_training_data.py --input "{input_file}" --show-errors',
+                "Analyzing training data for misaligned entities"
+            )
+        elif choice == '2':
+            self.run_command(
+                f'python3 scripts/validate_training_data.py --input "{input_file}" --output "{output_file}" --fix --show-errors',
+                "Fixing misaligned entities"
+            )
+        else:
+            return
+
+        input("\nPress Enter to continue...")
+
+    def merge_training_data(self):
+        """Option 19: Merge training data files"""
+        self.print_header()
+        print("🔀 MERGE TRAINING DATA")
+        print("-" * 70)
+        print()
+        print("This merges old + new training data:")
+        print("  ✓ Combines multiple training data sources")
+        print("  ✓ Deduplicates (avoids training on same offer twice)")
+        print("  ✓ Normalizes different formats → spaCy format")
+        print("  ✓ Statistics & analysis")
+        print()
+        print("Use case:")
+        print("  - You have existing training data (500 samples)")
+        print("  - Claude labeled 300 new samples")
+        print("  - Merge → 800 total (with deduplication)")
+        print()
+
+        # Show available training files
+        training_files = list(self.project_root.glob("*training*.json"))
+        training_files.extend(self.project_root.glob("*labeled*.json"))
+
+        if len(training_files) < 2:
+            print("❌ Need at least 2 training files to merge!")
+            print()
+            print("Available files:")
+            for f in training_files:
+                print(f"  - {f.name}")
+            input("\nPress Enter to continue...")
+            return
+
+        print("Available training files:")
+        for i, file in enumerate(training_files, 1):
+            try:
+                with open(file, 'r') as f:
+                    data = json.load(f)
+                    count = len(data) if isinstance(data, list) else 0
+                    print(f"  {i}. {file.name} ({count} examples)")
+            except:
+                print(f"  {i}. {file.name}")
+
+        print()
+        print("Enter EXISTING training files (space-separated):")
+        print("Example: training_data_labeled.json auto_training_data.json")
+        existing = input("Existing files: ").strip()
+
+        if not existing:
+            print("❌ At least one existing file required!")
+            input("\nPress Enter to continue...")
+            return
+
+        print()
+        new_file = input("Enter NEW training file (to be added): ").strip()
+        if not new_file:
+            print("❌ New file required!")
+            input("\nPress Enter to continue...")
+            return
+
+        output_file = input("Enter output filename (default: training_data_merged.json): ").strip()
+        if not output_file:
+            output_file = "training_data_merged.json"
+
+        self.run_command(
+            f'python3 scripts/merge_training_data.py --existing {existing} --new "{new_file}" --output "{output_file}"',
+            "Merging training data"
+        )
+
+        input("\nPress Enter to continue...")
+
+    def export_for_claude(self):
+        """Option 20: Export offers for Claude labeling"""
+        self.print_header()
+        print("📤 EXPORT FOR CLAUDE LABELING")
+        print("-" * 70)
+        print()
+        print("This exports car offers for Claude to label:")
+        print("  ✓ Exports unlabeled offers from scraped data")
+        print("  ✓ Creates JSON format for Claude chat")
+        print("  ✓ Claude labels → download → merge with existing data")
+        print()
+        print("Workflow:")
+        print("  1. Export offers (this tool)")
+        print("  2. Upload offers_for_labeling.json to Claude chat")
+        print("  3. Claude labels → download training_data_new.json")
+        print("  4. Merge with existing data (Option 19)")
+        print("  5. Train model!")
+        print()
+
+        count = input("How many offers to export? (default: 300): ").strip()
+        if not count:
+            count = "300"
+
+        output_file = input("Output filename (default: offers_for_labeling.json): ").strip()
+        if not output_file:
+            output_file = "offers_for_labeling.json"
+
+        # Check if script needs database path or brand
+        print()
+        print("Options:")
+        print("  1. Export from scraped data (if available)")
+        print("  2. Scrape fresh offers")
+        print()
+
+        choice = input("Choose option (1-2): ").strip()
+
+        if choice == '1':
+            self.run_command(
+                f'python3 scripts/export_for_claude_labeling.py --count {count} --output "{output_file}"',
+                f"Exporting {count} offers for Claude labeling"
+            )
+        elif choice == '2':
+            brand = input("Enter brand (e.g., skoda, mazda, vw): ").strip().lower()
+            if not brand:
+                brand = "skoda"
+
+            self.run_command(
+                f'python3 scripts/export_for_claude_labeling.py --count {count} --output "{output_file}" --brand {brand}',
+                f"Scraping & exporting {count} {brand} offers"
+            )
+        else:
+            return
+
+        print()
+        print("✅ Next steps:")
+        print(f"  1. Upload {output_file} to Claude chat")
+        print("  2. Use prompt from scripts/CLAUDE_LABELING_GUIDE.md")
+        print("  3. Download training_data_new.json from Claude")
+        print("  4. Run Option 19 (Merge Training Data)")
+
+        input("\nPress Enter to continue...")
+
     def show_menu(self):
         """Show main menu"""
         self.print_header()
@@ -932,11 +1181,17 @@ class WorkflowManager:
         print(" 14. Normalize Data            - Preview normalization (DB format)")
         print(" 15. Reset Workflow            - Delete all generated files")
         print(" 16. View Documentation        - Open WORKFLOW.md")
-        print(" 17. Exit")
+        print()
+        print("🛠️  TRAINING DATA TOOLS:")
+        print(" 18. Fix Misaligned Entities   - Fix [W030] warnings (auto-fix 80-90%)")
+        print(" 19. Merge Training Data       - Merge old + new data (deduplication)")
+        print(" 20. Export for Claude         - Export offers for Claude labeling")
+        print()
+        print(" 21. Exit")
         print("-" * 70)
         print()
 
-        choice = input("Choose option (1-17): ").strip()
+        choice = input("Choose option (1-21): ").strip()
 
         return choice
 
@@ -1009,12 +1264,21 @@ class WorkflowManager:
                 elif choice == '16':
                     self.view_documentation()
                 elif choice == '17':
+                    # Skip - renumbered
+                    pass
+                elif choice == '18':
+                    self.fix_misaligned_entities()
+                elif choice == '19':
+                    self.merge_training_data()
+                elif choice == '20':
+                    self.export_for_claude()
+                elif choice == '21':
                     self.print_header()
                     print("👋 Goodbye!")
                     print()
                     sys.exit(0)
                 else:
-                    print("\n❌ Invalid option. Please choose 1-17.")
+                    print("\n❌ Invalid option. Please choose 1-21.")
                     input("Press Enter to continue...")
 
             except KeyboardInterrupt:
