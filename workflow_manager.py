@@ -757,9 +757,11 @@ class WorkflowManager:
                 "Analyzing combined training data"
             )
 
-            # Clean up temp file
-            if temp_file.exists():
-                temp_file.unlink()
+            # Clean up temp file (DISABLED - keep for training!)
+            # if temp_file.exists():
+            #     temp_file.unlink()
+            print(f"\n💾 Temp file saved: {temp_file}")
+            print(f"   Use this for training!")
         else:
             return
 
