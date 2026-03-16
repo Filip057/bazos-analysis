@@ -172,9 +172,15 @@ class WorkflowManager:
 
         # Show available raw training files
         print("Available training files:")
-        training_files = list(self.project_root.glob("training_*.json"))
+        training_files = []
+        for pattern in ['training_*.json', '*training*.json', 'temp_*.json', 'auto_*.json', 'manual_*.json']:
+            training_files.extend(self.project_root.glob(pattern))
+
+        # Deduplicate and sort
+        training_files = sorted(set(training_files), key=lambda x: x.name)
+
         if not training_files:
-            print("❌ No training_*.json files found!")
+            print("❌ No training files found!")
             print()
             print("Run 'Scrape For Training' first to get raw data.")
             input("\nPress Enter to continue...")
@@ -189,11 +195,23 @@ class WorkflowManager:
                 print(f"  {i}. {file.name}")
 
         print()
-        input_file = input("Enter input filename (e.g., training_skoda.json): ").strip()
-        if not input_file:
+        input_file_input = input("Enter number or filename (e.g., training_skoda.json): ").strip()
+        if not input_file_input:
             print("❌ Filename required!")
             input("\nPress Enter to continue...")
             return
+
+        # Convert number to filename if needed
+        if input_file_input.isdigit():
+            idx = int(input_file_input) - 1
+            if 0 <= idx < len(training_files):
+                input_file = training_files[idx].name
+            else:
+                print(f"❌ Invalid number: {input_file_input} (choose 1-{len(training_files)})")
+                input("\nPress Enter to continue...")
+                return
+        else:
+            input_file = input_file_input
 
         output_file = input("Enter output filename (default: filtered_training_skoda.json): ").strip()
         if not output_file:
