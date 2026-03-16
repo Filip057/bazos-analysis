@@ -964,6 +964,9 @@ class WorkflowManager:
         for pattern in ['*training*.json', '*combined*.json', 'temp_*.json']:
             training_files.extend(self.project_root.glob(pattern))
 
+        # Deduplicate and sort
+        training_files = sorted(set(training_files), key=lambda x: x.name)
+
         if not training_files:
             print("❌ No training data files found!")
             print()
@@ -982,9 +985,18 @@ class WorkflowManager:
                 print(f"  {i}. {file.name}")
 
         print()
-        input_file = input("Enter input filename (default: temp_combined_training.json): ").strip()
+        input_file = input("Enter number or filename (default: temp_combined_training.json): ").strip()
         if not input_file:
             input_file = "temp_combined_training.json"
+        elif input_file.isdigit():
+            # User entered a number - convert to filename
+            idx = int(input_file) - 1  # Convert to 0-indexed
+            if 0 <= idx < len(training_files):
+                input_file = training_files[idx].name
+            else:
+                print(f"❌ Invalid number: {input_file} (choose 1-{len(training_files)})")
+                input("\nPress Enter to continue...")
+                return
 
         input_path = self.project_root / input_file
         if not input_path.exists():
@@ -1042,6 +1054,9 @@ class WorkflowManager:
         training_files = list(self.project_root.glob("*training*.json"))
         training_files.extend(self.project_root.glob("*labeled*.json"))
 
+        # Deduplicate and sort
+        training_files = sorted(set(training_files), key=lambda x: x.name)
+
         if len(training_files) < 2:
             print("❌ Need at least 2 training files to merge!")
             print()
@@ -1062,21 +1077,49 @@ class WorkflowManager:
                 print(f"  {i}. {file.name}")
 
         print()
-        print("Enter EXISTING training files (space-separated):")
-        print("Example: training_data_labeled.json auto_training_data.json")
-        existing = input("Existing files: ").strip()
+        print("Enter EXISTING training files (numbers or filenames, space-separated):")
+        print("Example: 1 2  OR  training_data_labeled.json auto_training_data.json")
+        existing_input = input("Existing files: ").strip()
 
-        if not existing:
+        if not existing_input:
             print("❌ At least one existing file required!")
             input("\nPress Enter to continue...")
             return
 
+        # Convert numbers to filenames
+        existing_parts = existing_input.split()
+        existing_files = []
+        for part in existing_parts:
+            if part.isdigit():
+                idx = int(part) - 1
+                if 0 <= idx < len(training_files):
+                    existing_files.append(training_files[idx].name)
+                else:
+                    print(f"❌ Invalid number: {part} (choose 1-{len(training_files)})")
+                    input("\nPress Enter to continue...")
+                    return
+            else:
+                existing_files.append(part)
+        existing = ' '.join(existing_files)
+
         print()
-        new_file = input("Enter NEW training file (to be added): ").strip()
-        if not new_file:
+        new_file_input = input("Enter NEW training file (number or filename): ").strip()
+        if not new_file_input:
             print("❌ New file required!")
             input("\nPress Enter to continue...")
             return
+
+        # Convert number to filename
+        if new_file_input.isdigit():
+            idx = int(new_file_input) - 1
+            if 0 <= idx < len(training_files):
+                new_file = training_files[idx].name
+            else:
+                print(f"❌ Invalid number: {new_file_input} (choose 1-{len(training_files)})")
+                input("\nPress Enter to continue...")
+                return
+        else:
+            new_file = new_file_input
 
         output_file = input("Enter output filename (default: training_data_merged.json): ").strip()
         if not output_file:
