@@ -90,16 +90,36 @@ async def get_listing_urls(brand: str, max_offers: int, session: aiohttp.ClientS
 
         soup = BeautifulSoup(html, 'html.parser')
 
-        # Find car listing links (same pattern as data_scrap.py)
-        links = soup.find_all('a', href=True)
+        # Find car listing containers (same as data_scrap.py)
+        listings = soup.find_all('div', class_='inzeraty inzeratyflex')
         page_urls = []
-        for link in links:
-            href = link.get('href', '')
-            # Match pattern: /inzerat/123456789/...
-            if '/inzerat/' in href and href.startswith('http'):
-                if href not in urls:  # Deduplicate
-                    urls.append(href)
-                    page_urls.append(href)
+
+        for listing in listings:
+            try:
+                # Get link from listing container
+                link = listing.find('a')
+                if not link or not link.get('href'):
+                    continue
+
+                relative_url = link.get('href')
+
+                # Convert relative URL to absolute
+                if relative_url.startswith('/'):
+                    absolute_url = f"https://auto.bazos.cz{relative_url}"
+                elif relative_url.startswith('http'):
+                    absolute_url = relative_url
+                else:
+                    continue
+
+                # Check if it's a car listing (contains /inzerat/)
+                if '/inzerat/' in absolute_url:
+                    if absolute_url not in urls:  # Deduplicate
+                        urls.append(absolute_url)
+                        page_urls.append(absolute_url)
+
+            except (AttributeError, TypeError):
+                # Skip malformed listings
+                continue
 
         logger.info(f"  Page {page_count} (offset {offset}): +{len(page_urls)} URLs (total: {len(urls)})")
 
