@@ -91,14 +91,20 @@ def preview_changes(normalized_groups):
 
     changes_needed = False
 
-    for normalized_value, variants in sorted(normalized_groups.items()):
+    # Sort with None values at the end
+    def sort_key(item):
+        key = item[0]
+        return (key is None, key if key is not None else '')
+
+    for normalized_value, variants in sorted(normalized_groups.items(), key=sort_key):
         # Count variants that need changing
         to_change = [(fuel, count) for fuel, count in variants if fuel != normalized_value]
         already_normalized = [(fuel, count) for fuel, count in variants if fuel == normalized_value]
 
         if to_change:
             changes_needed = True
-            print(f"\n{normalized_value}:")
+            display_value = normalized_value if normalized_value is not None else 'NULL (remove)'
+            print(f"\n{display_value}:")
 
             if already_normalized:
                 total_normalized = sum(count for _, count in already_normalized)
@@ -106,7 +112,7 @@ def preview_changes(normalized_groups):
 
             print(f"  ⚠️  Will be changed:")
             for fuel, count in to_change:
-                print(f"     '{fuel}' → '{normalized_value}' ({count:,} offers)")
+                print(f"     '{fuel}' → {display_value} ({count:,} offers)")
 
     if not changes_needed:
         print("\n✅ All fuel values are already normalized!")
