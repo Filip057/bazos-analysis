@@ -63,7 +63,17 @@ def load_training_data(original_file: str,
         with open(auto_file, 'r', encoding='utf-8') as f:
             auto_data = json.load(f)
             for item in auto_data:
-                all_data.append(item['data'])  # Extract training example
+                # Handle both formats:
+                # 1. Dict format: {"data": [...], "car_id": ...} (production)
+                # 2. List format: [text, {entities: ...}] (spaCy standard)
+                if isinstance(item, dict) and 'data' in item:
+                    # Production format - extract 'data' field
+                    all_data.append(item['data'])
+                elif isinstance(item, (list, tuple)) and len(item) == 2:
+                    # spaCy format - use as-is
+                    all_data.append(item)
+                else:
+                    logger.warning(f"Unknown format in auto data: {type(item)}")
             stats['auto'] = len(auto_data)
             logger.info(f"Loaded {stats['auto']} examples from auto-collection")
     else:
@@ -74,7 +84,15 @@ def load_training_data(original_file: str,
         with open(manual_file, 'r', encoding='utf-8') as f:
             manual_data = json.load(f)
             for item in manual_data:
-                all_data.append(item['data'])  # Extract training example
+                # Handle both formats (same as auto data)
+                if isinstance(item, dict) and 'data' in item:
+                    # Production format - extract 'data' field
+                    all_data.append(item['data'])
+                elif isinstance(item, (list, tuple)) and len(item) == 2:
+                    # spaCy format - use as-is
+                    all_data.append(item)
+                else:
+                    logger.warning(f"Unknown format in manual data: {type(item)}")
             stats['manual'] = len(manual_data)
             logger.info(f"Loaded {stats['manual']} examples from manual review")
     else:
