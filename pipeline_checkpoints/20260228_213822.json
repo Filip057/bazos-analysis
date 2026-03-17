@@ -1,0 +1,27 @@
+{
+  "session_id": "20260228_213822",
+  "started_at": "2026-02-28T21:38:22.424402",
+  "last_updated": "2026-02-28T21:38:23.452272",
+  "status": "completed",
+  "brands_done": [],
+  "processed_urls": {
+    "https://auto.bazos.cz/inzerat/215407107/skoda-enyaq-iv-80x-195kw-4x4-tztepelne-cerp.php": "saved",
+    "https://auto.bazos.cz/inzerat/215512181/skoda-octavia-4-combi-tsi-110kw-sportline-zaruka-autodraft.php": "saved",
+    "https://auto.bazos.cz/inzerat/214867922/octavia-iii-14tsi-110kw-style-2018-cr-fullled-kamera-dph.php": "saved",
+    "https://auto.bazos.cz/inzerat/215555888/skoda-octavia-ii-19tdi-77kw-rv112009-orig-bez-dpf.php": "filtered",
+    "https://auto.bazos.cz/inzerat/215507295/skoda-superb-3-combi-style-20-tdi-140kw-zaruka-autodraft.php": "saved",
+    "https://auto.bazos.cz/inzerat/215474621/skoda-superb-iii-20tdi-110kw-style-dsg-vyhrev-led-serviska.php": "saved",
+    "https://auto.bazos.cz/inzerat/215519604/skoda-fabia-12-i-51-kw-top-stav-klima.php": "saved",
+    "https://auto.bazos.cz/inzerat/215519280/skoda-karoq-15tsi-dsg-koupv-cr-21834-km-nehavarovan.php": "saved",
+    "https://auto.bazos.cz/inzerat/215498159/skoda-superb-iv-combi-etsi-160kw-sportline-zaruka-autodraft.php": "saved",
+    "https://auto.bazos.cz/inzerat/215537372/skoda-yeti-12-tsi-81kw-rv-2016-59tkm.php": "saved"
+  },
+  "stats": {
+    "total_processed": 10,
+    "saved": 9,
+    "failed": 0,
+    "filtered": 1,
+    "skipped": 0
+  },
+  "completed_at": "2026-02-28T21:38:23.452266"
+}

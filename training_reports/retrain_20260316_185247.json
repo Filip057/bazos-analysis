@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-03-16T18:52:47.182470",
+  "data_sources": {
+    "original": 100,
+    "auto": 2655,
+    "manual": 599
+  },
+  "total_examples": 3354,
+  "model_path": "./ml_models/car_ner"
+}
