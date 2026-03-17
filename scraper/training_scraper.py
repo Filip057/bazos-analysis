@@ -59,33 +59,54 @@ async def fetch_url(url: str, session: aiohttp.ClientSession, semaphore: asyncio
     return None
 
 
-async def get_listing_urls(brand: str, max_pages: int, session: aiohttp.ClientSession, semaphore: asyncio.Semaphore) -> List[str]:
-    """Get list of car listing URLs from category pages"""
-    logger.info(f"📄 Fetching listing URLs for brand: {brand} (max {max_pages} pages)")
+async def get_listing_urls(brand: str, max_offers: int, session: aiohttp.ClientSession, semaphore: asyncio.Semaphore) -> List[str]:
+    """Get list of car listing URLs from category pages
+
+    Bazos.cz URL pattern:
+      - https://auto.bazos.cz/skoda/      (offers 0-19)
+      - https://auto.bazos.cz/skoda/20/   (offers 20-39)
+      - https://auto.bazos.cz/skoda/40/   (offers 40-59)
+      - etc. (increment by 20 each page)
+    """
+    logger.info(f"📄 Fetching listing URLs for brand: {brand} (target: {max_offers} offers)")
 
     urls = []
     base_url = f"{CAR_URL}{brand}/"
 
-    for page in range(max_pages):
-        page_url = f"{base_url}{page}/" if page > 0 else base_url
+    # Calculate how many pages to fetch (20 offers per page)
+    # Add 20% buffer for duplicates/errors
+    max_offset = int(max_offers * 1.2)
+    page_count = 0
+
+    # Iterate through offsets: 0, 20, 40, 60, ...
+    for offset in range(0, max_offset, 20):
+        page_count += 1
+        page_url = f"{base_url}{offset}/" if offset > 0 else base_url
 
         html = await fetch_url(page_url, session, semaphore)
         if not html:
-            logger.warning(f"Failed to fetch page {page}")
+            logger.warning(f"Failed to fetch page at offset {offset}")
             continue
 
         soup = BeautifulSoup(html, 'html.parser')
 
         # Find car listing links (same pattern as data_scrap.py)
         links = soup.find_all('a', href=True)
+        page_urls = []
         for link in links:
             href = link.get('href', '')
             # Match pattern: /inzerat/123456789/...
             if '/inzerat/' in href and href.startswith('http'):
                 if href not in urls:  # Deduplicate
                     urls.append(href)
+                    page_urls.append(href)
 
-        logger.info(f"  Page {page + 1}/{max_pages}: {len(urls)} total URLs")
+        logger.info(f"  Page {page_count} (offset {offset}): +{len(page_urls)} URLs (total: {len(urls)})")
+
+        # Stop if we have enough URLs
+        if len(urls) >= max_offers:
+            logger.info(f"  Reached target ({len(urls)} >= {max_offers}), stopping")
+            break
 
         # Small delay between pages
         await asyncio.sleep(0.5)
@@ -143,17 +164,14 @@ async def scrape_training_data(brand: str, max_offers: int, output_file: str):
     logger.info(f"Output: {output_file}")
     logger.info("=" * 70)
 
-    # Calculate pages needed (roughly 20 offers per page)
-    max_pages = (max_offers // 20) + 5  # +5 buffer for duplicates/errors
-
     # Setup async session
     connector = TCPConnector(limit=MAX_CONCURRENT_REQUESTS)
     timeout = ClientTimeout(total=REQUEST_TIMEOUT)
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
     async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
-        # Phase 1: Get listing URLs
-        urls = await get_listing_urls(brand, max_pages, session, semaphore)
+        # Phase 1: Get listing URLs (will fetch up to max_offers)
+        urls = await get_listing_urls(brand, max_offers, session, semaphore)
 
         # Limit to max_offers
         urls = urls[:max_offers]
