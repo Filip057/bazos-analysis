@@ -20,7 +20,10 @@ import argparse
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from ml.production_extractor import DataNormalizer
-import config
+from webapp.config import get_config
+
+# Load configuration
+config = get_config()
 
 def get_db_connection():
     """Create database connection"""
