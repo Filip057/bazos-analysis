@@ -37,11 +37,14 @@ from ml.entity_feedback_verifier import EntityFeedbackVerifier
 class DataNormalizer:
     """Normalizes extracted data for database consistency"""
 
-    # Fuel type normalization
-    FUEL_DIESEL = {'diesel', 'nafta', 'tdi', 'td', 'motorová nafta', 'motorova nafta'}
-    FUEL_BENZIN = {'benzín', 'benzin', 'gas', 'gasoline', 'b'}
+    # Fuel type normalization - exact matches
+    FUEL_DIESEL = {'diesel', 'nafta', 'tdi', 'td', 'motorová nafta', 'motorova nafta',
+                   'disel', 'naftový', 'naftovým', 'dieselový', 'dieselovým'}
+    FUEL_BENZIN = {'benzín', 'benzin', 'gas', 'gasoline', 'b',
+                   'benzínový', 'benzínovým'}
     FUEL_LPG = {'lpg', 'plyn'}
     FUEL_ELECTRIC = {'elektro', 'electric', 'ev', 'elektřina'}
+    FUEL_HYBRID = {'hybrid', 'hybridní', 'hybridním'}
 
     @staticmethod
     def normalize_fuel(fuel: Optional[str]) -> Optional[str]:
@@ -51,6 +54,7 @@ class DataNormalizer:
 
         fuel_lower = fuel.lower().strip()
 
+        # Exact match first
         if fuel_lower in DataNormalizer.FUEL_DIESEL:
             return 'diesel'
         elif fuel_lower in DataNormalizer.FUEL_BENZIN:
@@ -59,9 +63,32 @@ class DataNormalizer:
             return 'lpg'
         elif fuel_lower in DataNormalizer.FUEL_ELECTRIC:
             return 'elektro'
-        else:
-            # Unknown fuel type - return as is
-            return fuel
+        elif fuel_lower in DataNormalizer.FUEL_HYBRID:
+            return 'hybrid'
+
+        # Pattern matching for partial matches
+        if 'diesel' in fuel_lower or 'nafta' in fuel_lower or 'naft' in fuel_lower:
+            return 'diesel'
+        elif 'benz' in fuel_lower:
+            return 'benzín'
+        elif 'hybrid' in fuel_lower:
+            return 'hybrid'
+        elif 'lpg' in fuel_lower or 'plyn' in fuel_lower:
+            return 'lpg'
+        elif 'elek' in fuel_lower or 'ev' in fuel_lower:
+            return 'elektro'
+
+        # Filter out obvious non-fuel values
+        import re
+        # If it's just numbers or looks like mileage/displacement
+        if re.match(r'^[\d\.,]+(?:km|tkm|l)?$', fuel_lower):
+            return None
+        # If it contains "dovoz" or other irrelevant terms
+        if any(word in fuel_lower for word in ['dovoz', 'tis', 'tkm', 'litr']):
+            return None
+
+        # Unknown fuel type - return as is
+        return fuel
 
     @staticmethod
     def normalize_mileage(mileage: any) -> Optional[int]:
