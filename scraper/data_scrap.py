@@ -82,14 +82,75 @@ def get_frequency_analysis(string_list: list):
 #   - Context-aware regex (avoids false positives like STK dates)
 #   - Continuous learning (auto-collects training data from production)
 
-def get_model(brand, header: str) -> str:
-    """Extract car model from header text (still uses regex as models vary by brand)"""
-    models = CAR_MODELS.get(brand)
-    if models is not None:
-        pattern = re.compile(r'\b(?:' + '|'.join(models) + r')\b', re.IGNORECASE)
-        match = pattern.search(header)
-        if match:
-            return match.group(0)
+def _normalize_text(text: str) -> str:
+    """Normalize text for matching: lowercase, collapse whitespace."""
+    text = text.lower().strip()
+    text = re.sub(r'\s+', ' ', text)
+    return text
+
+
+# Build alias lookup per brand (cached at import time)
+from scraper.car_models import MODEL_ALIASES
+
+def _build_brand_aliases():
+    """Build a mapping: brand → [(pattern_text, canonical_model)]
+    sorted longest-first so longer aliases match before shorter ones."""
+    brand_aliases = {}
+    for brand, models in CAR_MODELS.items():
+        entries = []
+        # Add canonical model names
+        for m in models:
+            entries.append((m.lower(), m.lower()))
+        # Add aliases that resolve to a model of this brand
+        canonical_set = {m.lower() for m in models}
+        for alias, canonical in MODEL_ALIASES.items():
+            if canonical.lower() in canonical_set:
+                entries.append((alias.lower(), canonical.lower()))
+        # Sort longest first to prefer longer matches (e.g. "grand vitara" before "vitara")
+        entries.sort(key=lambda x: -len(x[0]))
+        brand_aliases[brand] = entries
+    return brand_aliases
+
+_BRAND_ALIASES = _build_brand_aliases()
+
+
+def get_model(brand: str, header: str, description: str = None) -> str:
+    """Extract car model from header (and optionally description) with alias support.
+
+    Strategy:
+      1. Normalize header text
+      2. Try matching aliases + canonical names (longest first)
+      3. If no match in header and description provided, try description
+      4. Return canonical model name (as stored in DB)
+    """
+    entries = _BRAND_ALIASES.get(brand)
+    if not entries:
+        return None
+
+    for text in [header, description]:
+        if not text:
+            continue
+        normalized = _normalize_text(text)
+
+        for pattern_text, canonical in entries:
+            # Build a flexible regex: allow optional separators between parts
+            # e.g. "cx-3" matches "cx3", "cx 3", "cx-3"
+            escaped = re.escape(pattern_text)
+            # Replace escaped spaces/hyphens/dots with flexible separator pattern
+            flexible = re.sub(r'(\\ |\\\-|\\\.)', r'[\\s\\-\\.]*', escaped)
+            # Use word boundary on left, but flexible right boundary
+            # (handles "308sw" where "308" should still match)
+            regex = r'(?<![a-záčďéěíňóřšťúůýž\d])' + flexible + r'(?![a-záčďéěíňóřšťúůýž])'
+            match = re.search(regex, normalized)
+            if match:
+                # For purely numeric models (106, 2008, etc.), reject if preceded
+                # by year-indicating words like "rok", "rv", "r.v."
+                if pattern_text.isdigit():
+                    before = normalized[:match.start()]
+                    if re.search(r'(?:rok|rv|r\.?\s?v\.?|roku|rokem|roce)\s*$', before):
+                        continue
+                return canonical
+
     return None
 
 # ASYNCHRONOUS WEB SCRAPPING with error handling and retries
@@ -254,8 +315,8 @@ async def process_data(brand: str, url: str, description: str, heading: str, pri
     combined_text = f"{heading}\n{description}"
     extraction_result = extractor.extract(combined_text, car_id=url)
 
-    # Extract model separately (brand-specific patterns)
-    model = get_model(brand=brand, header=heading)
+    # Extract model separately (brand-specific patterns, with description fallback)
+    model = get_model(brand=brand, header=heading, description=description)
 
     car_data = {
         "brand": brand,

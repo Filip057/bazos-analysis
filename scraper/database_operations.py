@@ -34,51 +34,81 @@ csv_lock = asyncio.Lock()
 Here are functions that i use to operate with database, or somehow related to database
 """
 
-# This fnc checks if the offer is PROBABLY a car offer
-# trying to select data from tires, disc, car parts... 
-def check_if_car(model, heading, price):
-    if model == None:
-        return False
-    if price is None or price < 5000:
-        return False
-    non_car_keywords = [
-        # Původní klíčová slova (FIXED: add versions without diacritics)
-        'ALU', 'kola', 'kol', 'motor', 'sada',
-        'díly', 'dily',  # With AND without diacritics
-        'sklo', 'převodovka', 'prevodovka',
-        'pneu', 'pneumatiky', 'disky',
-        'sedadla', 'baterie',
-        'náhradní', 'nahradni',  # "NAHRADNI DILY"
-        'zrcátka', 'zrcatka',
-        'motocykl', 'motorky', 'moto', 'kolo',
-        'skútr', 'skutr',
-        'motorové', 'motorove', 'karavany',
-        'choppery', 'endura', 'autobus',
-        'autodíly', 'autodily',
-        'zimní', 'zimni', 'letní', 'letni',
+# ── Pre-compiled patterns for check_if_car (compiled once, not per call) ──
 
-        # Nová klíčová slova - specifické autodíly (with AND without diacritics)
-        'nárazník', 'naraznik', 'nárazníky', 'narazniky',
-        'blatník', 'blatnik', 'blatníky', 'blatniky',
-        'světla', 'svetla', 'světlo', 'svetlo', 'lampy', 'lampa',
-        'hlava motoru', 'hlava', 'válce', 'valce', 'píst', 'pist',
-        'kapota', 'dveře', 'dvere', 'dverí', 'dveri', 'kufr', 'víko', 'viko',
-        'volant', 'airbag', 'řídící', 'ridici',
-        'výfuk', 'vyfuk', 'katalyzátor', 'katalyzator', 'dpf',
-        'čelní sklo', 'celni sklo', 'okno', 'skla',
-        'turbo', 'turbodmychadlo', 'kompresor',
-        'náprava', 'naprava', 'kolo', 'ložisko', 'lozisko',
-        'brzdy', 'kotouč', 'kotouc', 'destičky', 'desticky',
-        'tlumiče', 'tlumice', 'tlumič', 'tlumic', 'pružiny', 'pruziny',
-        'rám', 'ram', 'karoserie', 'podvozek',
-        'originál', 'original', 'bazar', 'rozbit',
-        'veškere', 'veskere', 'všechny', 'vsechny',  # "VESKERE NAHRADNI DILY"
-    ]
-    
-    non_car_pattern = re.compile(r'\b(?:' + '|'.join(map(re.escape, non_car_keywords)) + r')\b', re.IGNORECASE)
-    
-    # Check if any non-car keyword is present in the heading
-    return not bool(non_car_pattern.search(heading))
+# Multi-word phrases checked first (order matters — longer phrases before single words
+# to avoid false positives like "na díly" vs standalone "díly")
+_NOT_SELLING_PATTERNS = re.compile(
+    r'\b(?:koup[ií]m|hled[aá]m|sh[aá]n[ií]m|popt[aá]v[aá]m'
+    r'|pronaj[ií]m[aá]m|pron[aá]jem|p[uů]j[čc]ovna)\b',
+    re.IGNORECASE,
+)
+
+# Phrases that clearly indicate non-car listings (multi-word, checked on heading)
+_PARTS_PHRASES = re.compile(
+    r'(?:'
+    r'na\s+d[ií]ly|n[aá]hradn[ií]\s+d[ií]ly|auto\s*d[ií]ly'
+    r'|[čc]eln[ií]\s+sklo|hlava\s+motoru'
+    r'|stře[sš]n[ií]\s+nosi[čc]|stře[sš]n[ií]\s+box'
+    r'|ta[zž]n[eé]\s+za[rř][ií]zen[ií]'
+    r'|zimn[ií]\s+pneu|letn[ií]\s+pneu'
+    r'|sada\s+kol|sada\s+disk[uů]|sada\s+pneu'
+    r'|na\s+rozborku|rozborka'
+    r')',
+    re.IGNORECASE,
+)
+
+# Single keywords that in a heading strongly indicate parts/accessories, not a car.
+# Intentionally conservative — only words that almost never appear in real car sale headings.
+_PARTS_KEYWORDS = re.compile(
+    r'\b(?:'
+    # Parts and components
+    r'n[aá]razn[ií]k[y]?|blatn[ií]k[y]?|sv[eě]tl[ao]|sv[eě]tla'
+    r'|n[aá]prava|lo[zž]isk[oa]|brzd[oy]|desti[čc]k[yi]|kotou[čc][e]?'
+    r'|tlumi[čc][e]?|pru[zž]in[ya]'
+    r'|p[ií]st[y]?|v[aá]lce|turbodmychadlo'
+    r'|v[yý]fuk|katalyz[aá]tor|dpf|egr'
+    # Tyres, wheels, discs
+    r'|pneumatik[yi]|pneu|disk[yi]|alu\s*kol[ao]?'
+    # Non-car vehicles
+    r'|motocykl|motorka|motorky|sk[uú]tr|moped'
+    r'|autobus|n[aá]kladn[ií]'
+    # Accessories only (not parts of car description)
+    r'|autosed[aá][čc]k[au]|kobe[rř]e[čc]k[yi]|potahy'
+    # Explicit parts listings
+    r'|autodíly|autodily'
+    r')\b',
+    re.IGNORECASE,
+)
+
+MIN_CAR_PRICE = 5000
+
+
+def check_if_car(description, heading, price):
+    """Check if a listing is probably a real car-for-sale offer.
+
+    Returns True if the listing looks like a genuine car sale.
+    Returns False for parts, accessories, "looking to buy", rentals, etc.
+    """
+    if price is None or price < MIN_CAR_PRICE:
+        return False
+
+    if not heading:
+        return False
+
+    # Check heading for "buying" intent (not selling)
+    if _NOT_SELLING_PATTERNS.search(heading):
+        return False
+
+    # Check heading for parts phrases (multi-word, high confidence)
+    if _PARTS_PHRASES.search(heading):
+        return False
+
+    # Check heading for parts keywords (single words, conservative list)
+    if _PARTS_KEYWORDS.search(heading):
+        return False
+
+    return True
 
 def compute_derived_metrics(price, mileage, year_manufacture):
     current_year = datetime.now().year

@@ -87,6 +87,48 @@ def dashboard():
 
 
 # =============================================================================
+# DROPDOWN API — brands & models for forms
+# =============================================================================
+
+@app.route("/api/brands")
+@limiter.limit("60 per minute")
+def api_brands():
+    """List all brands that have at least one offer."""
+    try:
+        with get_db_session() as session:
+            rows = (
+                session.query(Car.brand)
+                .filter(Car.brand.isnot(None))
+                .distinct()
+                .order_by(Car.brand)
+                .all()
+            )
+            return jsonify([r.brand for r in rows])
+    except SQLAlchemyError as e:
+        logger.error(f"DB error in api_brands: {e}")
+        return jsonify({"error": "Database error"}), 500
+
+
+@app.route("/api/models/<string:brand>")
+@limiter.limit("60 per minute")
+def api_models(brand):
+    """List all models for a given brand that have at least one offer."""
+    try:
+        with get_db_session() as session:
+            rows = (
+                session.query(Car.model)
+                .filter(Car.brand == brand, Car.model.isnot(None))
+                .distinct()
+                .order_by(Car.model)
+                .all()
+            )
+            return jsonify([r.model for r in rows])
+    except SQLAlchemyError as e:
+        logger.error(f"DB error in api_models: {e}")
+        return jsonify({"error": "Database error"}), 500
+
+
+# =============================================================================
 # ANALYTICS API  — Module 1: Overview
 # =============================================================================
 
@@ -380,20 +422,9 @@ def stats_price_distribution():
         return jsonify({"error": "Database error"}), 500
    
 
-@app.route('/car-compare', methods=['GET', 'POST'])
+@app.route('/car-compare')
 def car_comparison():
-    form = CarComparisonForm()
-    if form.validate_on_submit():
-        brand = form.brand.data
-        model = form.model.data
-        price = form.price.data
-        year = form.year.data
-        y_plusminus = form.y_plusminus.data
-        mileage = form.mileage.data
-        m_pct_plusminus = form.m_pct_plusminus.data
-        # Redirect to the comparison route with form data as query parameters
-        return redirect(url_for('get_comparison', brand=brand, model=model, price=price, year=year, y_plusminus=y_plusminus, mileage=mileage, m_pct_plusminus=m_pct_plusminus))
-    return render_template('car_comparison.html', form=form)
+    return render_template('car-compare.html')
 
 
 # ------  FORM CLASS ----------

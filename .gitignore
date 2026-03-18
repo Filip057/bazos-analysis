@@ -51,5 +51,8 @@ model-*/
 # NLTK data
 nltk_data/
 
+# DB management scripts (local only)
+scripts/
+
 # Other
 get-pip.py
