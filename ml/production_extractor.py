@@ -39,12 +39,18 @@ class DataNormalizer:
 
     # Fuel type normalization - exact matches
     FUEL_DIESEL = {'diesel', 'nafta', 'tdi', 'td', 'motorová nafta', 'motorova nafta',
-                   'disel', 'naftový', 'naftovým', 'dieselový', 'dieselovým'}
+                   'disel', 'naftový', 'naftovým', 'dieselový', 'dieselovým',
+                   'hdi', 'cdti', 'crdi', 'dci', 'jtd', 'jtdm', 'tdci',
+                   'turbodiesel', 'naftak', 'dýzl',
+                   'naftového', 'naftovému', 'naftovém'}
     FUEL_BENZIN = {'benzín', 'benzin', 'gas', 'gasoline', 'b',
-                   'benzínový', 'benzínovým'}
+                   'benzínový', 'benzínovým', 'benzínového', 'benzínovém',
+                   'benzinový', 'benzinového', 'benzinovým',
+                   'tsi', 'e85'}
     FUEL_LPG = {'lpg', 'plyn'}
-    FUEL_ELECTRIC = {'elektro', 'electric', 'ev', 'elektřina'}
-    FUEL_HYBRID = {'hybrid', 'hybridní', 'hybridním'}
+    FUEL_CNG = {'cng'}
+    FUEL_ELECTRIC = {'elektro', 'electric', 'ev', 'elektřina', 'bev'}
+    FUEL_HYBRID = {'hybrid', 'hybridní', 'hybridním', 'hybridního', 'phev', 'mhev'}
 
     @staticmethod
     def normalize_fuel(fuel: Optional[str]) -> Optional[str]:
@@ -61,6 +67,8 @@ class DataNormalizer:
             return 'benzín'
         elif fuel_lower in DataNormalizer.FUEL_LPG:
             return 'lpg'
+        elif fuel_lower in DataNormalizer.FUEL_CNG:
+            return 'cng'
         elif fuel_lower in DataNormalizer.FUEL_ELECTRIC:
             return 'elektro'
         elif fuel_lower in DataNormalizer.FUEL_HYBRID:
@@ -75,7 +83,9 @@ class DataNormalizer:
             return 'hybrid'
         elif 'lpg' in fuel_lower or 'plyn' in fuel_lower:
             return 'lpg'
-        elif 'elek' in fuel_lower or 'ev' in fuel_lower:
+        elif 'cng' in fuel_lower:
+            return 'cng'
+        elif 'elek' in fuel_lower or fuel_lower in ('ev', 'bev'):
             return 'elektro'
 
         # Filter out obvious non-fuel values
@@ -469,11 +479,17 @@ class ProductionExtractor:
 
         # Fuel - RAW extraction (keep as written in text!)
         # Match both nouns and adjectives (benzín, benzínový, dieselový, etc.)
+        # Includes diesel engine codes (TDI, HDi, CDTi, CRDi, dCi, JTD)
+        # and hybrid variants (PHEV, MHEV)
         import re
         fuel_pattern = re.compile(
             r'\b(benzin(?:ový|ového|ovým|ové|ovém)?|benzín(?:ový|ového|ovým|ové|ovém)?|'
             r'nafta|naftový(?:ho|mu|m|ém)?|diesel(?:ový|ového|ovým|ové)?|'
-            r'dýzl|naftak|turbodiesel|tdi|tsi|hybrid|elektro|electric|lpg|cng|plyn)\b',
+            r'dýzl|naftak|turbodiesel|'
+            r'tdi|tsi|hdi|cdti|crdi|dci|jtd[m]?|tdci|'  # diesel/petrol engine codes
+            r'hybrid(?:ní|ním|ního)?|phev|mhev|'  # hybrid variants
+            r'elektro|electric|ev|bev|'  # electric variants
+            r'lpg|cng|plyn|e85)\b',  # gas/alternative fuels
             re.IGNORECASE
         )
         fuel_match = fuel_pattern.search(text)

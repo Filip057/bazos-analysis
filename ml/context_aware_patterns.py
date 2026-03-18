@@ -56,15 +56,18 @@ class ContextAwarePatterns:
         re.compile(r'(?:0[1-9]|1[0-2])/(19[89]\d|20[0-2]\d)\b', re.IGNORECASE),  # "12/2016", "01/2022"
     ]
 
-    # NEGATIVE patterns - EXCLUDE these (STK, service, repairs)
+    # NEGATIVE patterns - EXCLUDE these (STK, service, repairs, non-year contexts)
     YEAR_EXCLUDE = [
         re.compile(r'(?:stk|technická|emise|emisní)\s+(?:do|platnost|konec)?\s*(\d{4})', re.IGNORECASE),  # "STK do 2027"
         re.compile(r'(?:servis|serviska|oprava|výměna|vyměněn)\s+(\d{4})', re.IGNORECASE),  # "servis 2023"
         re.compile(r'(?:pneumatiky|pneu|kola|brzdy|motor|převodovka)\s+(?:z|z\s+roku)?\s*(\d{4})', re.IGNORECASE),  # "pneumatiky 2024"
         re.compile(r'nové?\s+(?:od|z)\s+(\d{4})', re.IGNORECASE),  # "nové od 2023"
-        # NEW: Exclude service/repair dates (rozvody 2024, brzdy 2025, etc.)
+        # Service/repair dates
         re.compile(r'(?:rozvody|rozvodový|řemen|řemeny|brzdy|brzdové|destičky|kotouče|olej|filtr|filtry)\s+(?:dělané?|dělaný|vyměněné?|vyměněn[yoa]?|při|z|ze)\s*(\d{4})', re.IGNORECASE),
-        re.compile(r'(?:dělané?|vyměněné?|vyměněn[yoa]?|oprava|opraveno)\s+(?:při|v|ve|z)?\s*(\d{4})', re.IGNORECASE),  # "dělány 2023", "vyměněny 2023"
+        re.compile(r'(?:dělané?|vyměněné?|vyměněn[yoa]?|oprava|opraveno)\s+(?:při|v|ve|z)?\s*(\d{4})', re.IGNORECASE),
+        # Non-year numbers: phone, PSČ, IČO, číslo inzerátu, ID
+        re.compile(r'(?:tel\.?|telefon|mobil|PSČ|PS[CČ]|I[ČC]O?|[čc][ií]slo|inzer[aá]t[u]?|ID)\s*:?\s*(\d{4})', re.IGNORECASE),
+        re.compile(r'(\d{4})\s*\d{2,}', re.IGNORECASE),  # year-like followed by more digits (phone: "2015 12345")
     ]
 
     # LOW confidence - standalone year (last resort)
@@ -129,13 +132,18 @@ class ContextAwarePatterns:
         re.compile(r'\b((\d{5,6}))(?!\s?k[mw]|\d)', re.IGNORECASE),  # "150000" (5-6 digits)
     ]
 
-    # EXCLUDE mileage patterns (daily mileage, range, service records, etc.)
+    # EXCLUDE mileage patterns (daily mileage, range, service records, prices, etc.)
     MILEAGE_EXCLUDE = [
         re.compile(r'(?:dojezd|dosah|range)\s+(\d+)\s?km', re.IGNORECASE),  # "dojezd 400 km" (electric car range)
         re.compile(r'(\d+)\s?km\s+(?:denně|měsíčně|ročně)', re.IGNORECASE),  # "50 km denně"
-        # NEW: Exclude service-related mileage (servis při xxx km, rozvody při xxx km)
+        # Service-related mileage
         re.compile(r'(?:servis|serviska|poslední\s+servis|oprava|výměna|vyměněn|dělané?)\s+(?:při|v|ve|na)?\s*[:.]?\s*(\d{1,3}(?:[\s.]?\d{3})*)\s?km', re.IGNORECASE),
         re.compile(r'(?:rozvody|rozvodový|řemen|brzdy|olej|filtr|filtry)\s+(?:při|dělané?|vyměněné?)\s+(\d{1,3}(?:[\s.]?\d{3})*)\s?km', re.IGNORECASE),
+        # Prices — number followed by currency (Kč, CZK, EUR, korun)
+        re.compile(r'(\d{1,3}(?:[\s.]\d{3})+)\s*(?:K[čc]|CZK|EUR|korun|,-)', re.IGNORECASE),
+        re.compile(r'(?:cena|sleva|doplatek)\s*[:.]?\s*(\d{1,3}(?:[\s.]\d{3})*)', re.IGNORECASE),
+        # PSČ (5-digit Czech zip codes)
+        re.compile(r'(?:PS[ČC]|ps[čc])\s*:?\s*(\d[\s.]?\d{3})', re.IGNORECASE),
     ]
 
     # POWER PATTERNS - ONLY kW (FIXED: exclude HP/PS/koně)
