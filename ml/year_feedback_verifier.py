@@ -29,6 +29,7 @@ Confidence matrix:
 """
 
 import re
+from datetime import datetime
 from typing import Optional
 from dataclasses import dataclass, asdict
 
@@ -81,9 +82,9 @@ class YearFeedbackVerifier:
     # Context window around candidate year for ML verification (chars)
     CONTEXT_WINDOW = 60
 
-    # Valid car year range
-    YEAR_MIN = 1985
-    YEAR_MAX = 2026
+    # Valid car year range (dynamic max)
+    YEAR_MIN = 1990
+    YEAR_MAX = datetime.now().year + 1
 
     def __init__(self, ml_extractor, confidence_threshold: float = 0.65):
         """

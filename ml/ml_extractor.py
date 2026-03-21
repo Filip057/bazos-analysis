@@ -328,11 +328,12 @@ class CarDataExtractor:
 
     def _parse_year(self, text: str) -> Optional[int]:
         """Convert year text to integer"""
+        from datetime import datetime
+        max_year = datetime.now().year + 1
         match = re.search(r'(\d{4})', text)
         if match:
             year = int(match.group(1))
-            # Validate year range
-            if 1900 <= year <= 2030:
+            if 1990 <= year <= max_year:
                 return year
         return None
 

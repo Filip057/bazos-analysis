@@ -70,18 +70,31 @@ _PARTS_KEYWORDS = re.compile(
     r'|v[yý]fuk|katalyz[aá]tor|dpf|egr'
     # Tyres, wheels, discs
     r'|pneumatik[yi]|pneu|disk[yi]|alu\s*kol[ao]?'
-    # Non-car vehicles
+    # Non-car vehicles — motorcycles
     r'|motocykl|motorka|motorky|sk[uú]tr|moped'
-    r'|autobus|n[aá]kladn[ií]'
+    # Non-car vehicles — buses
+    r'|autobus'
+    # Non-car vehicles — tractors, construction, industrial
+    r'|traktor[y]?|bagr[y]?|naklada[čc][e]?|rolba'
+    r'|vysokozdvi[zž]n[yý]'
+    # Non-car vehicles — caravans, trailers
+    r'|karavan[y]?|obytn[yý]|obyt[nň][aá]k'
+    r'|p[rř][ií]v[eě]s[y]?|p[rř][ií]v[eě]sn[yý]'
+    # Non-car vehicles — quads, trikes, golf carts
+    r'|[čc]ty[rř]kolk[ay]|t[rř][ií]kolk[ay]'
+    r'|golfov[yý]\s+voz[ií]k'
     # Accessories only (not parts of car description)
     r'|autosed[aá][čc]k[au]|kobe[rř]e[čc]k[yi]|potahy'
+    # Tyres as standalone listing
+    r'|kol[ay]\s*\+\s*gum[yi]'
     # Explicit parts listings
-    r'|autodíly|autodily'
+    r'|autodíly|autodily|d[ií]ly'
     r')\b',
     re.IGNORECASE,
 )
 
 MIN_CAR_PRICE = 5000
+MAX_CAR_PRICE = 50_000_000  # 50M CZK — anything above is clearly fake
 
 
 def check_if_car(description, heading, price):
@@ -90,7 +103,7 @@ def check_if_car(description, heading, price):
     Returns True if the listing looks like a genuine car sale.
     Returns False for parts, accessories, "looking to buy", rentals, etc.
     """
-    if price is None or price < MIN_CAR_PRICE:
+    if price is None or price < MIN_CAR_PRICE or price > MAX_CAR_PRICE:
         return False
 
     if not heading:
@@ -110,12 +123,30 @@ def check_if_car(description, heading, price):
 
     return True
 
-def compute_derived_metrics(price, mileage, year_manufacture):
+def validate_year(year_manufacture: int) -> Optional[int]:
+    """Validate year of manufacture before DB insert.
+
+    Returns the year if valid, None otherwise.
+    Rejects future years and anything before 1990.
+    """
+    if year_manufacture is None:
+        return None
     current_year = datetime.now().year
+    if 1990 <= year_manufacture <= current_year + 1:
+        return year_manufacture
+    logger.warning(f"Rejected invalid year_manufacture={year_manufacture}")
+    return None
+
+
+def compute_derived_metrics(price, mileage, year_manufacture):
+    """Compute derived metrics with year validation."""
+    current_year = datetime.now().year
+    # Validate year first
+    year_manufacture = validate_year(year_manufacture)
     years_in_usage = current_year - year_manufacture if year_manufacture else None
     price_per_km = price / mileage if mileage and mileage > 0 else None
     mileage_per_year = mileage / years_in_usage if mileage and years_in_usage and years_in_usage > 0 else None
-    return years_in_usage, price_per_km, mileage_per_year  
+    return years_in_usage, price_per_km, mileage_per_year
 
 async def log_unknown_model(model: Optional[str], url: str, year_manufacture: Optional[int] = None,
                             mileage: Optional[int] = None, price: Optional[int] = None):
@@ -230,8 +261,11 @@ async def fetch_data_into_database(data: List[Dict], batch_size: int = 100):
                         unique_id_match = UNIQUE_ID_PATTERN.search(item['url'])
                         unique_id = unique_id_match.group(1) if unique_id_match else None
 
+                        # Validate year before insert
+                        validated_year = validate_year(item['year_manufacture'])
+
                         years_in_usage, price_per_km, mileage_per_year = compute_derived_metrics(
-                            item['price'], item['mileage'], item['year_manufacture']
+                            item['price'], item['mileage'], validated_year
                         )
 
                         # Use cached model_id
@@ -240,7 +274,7 @@ async def fetch_data_into_database(data: List[Dict], batch_size: int = 100):
                         if model_id:
                             values.append((
                                 model_id,
-                                item['year_manufacture'],
+                                validated_year,
                                 item['mileage'],
                                 item['power'],
                                 item.get('fuel'),       # NEW: fuel type

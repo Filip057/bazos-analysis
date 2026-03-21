@@ -11,8 +11,13 @@ For YEAR extraction:
 """
 
 import re
+from datetime import datetime
 from typing import List, Tuple, Optional
 from dataclasses import dataclass
+
+# Dynamic year ceiling: current year + 1 (for cars manufactured late in the year)
+YEAR_MAX = datetime.now().year + 1
+YEAR_MIN = 1990
 
 
 @dataclass
@@ -44,6 +49,8 @@ class ContextAwarePatterns:
         re.compile(r'(?:r\.?\s?v\.?|rok\s+výr(?:oby)?\.?)\s*[:.]?\s*\d{1,2}/(\d{4})', re.IGNORECASE),  # "r.v.01/2022", "rok výr. 12/2010"
         re.compile(r'(?:první|1\.?)\s*(?:registrace|reg\.?)\s*[:.]?\s*\d{1,2}/(\d{4})', re.IGNORECASE),  # "1.reg.2012", "první registrace 8/2016"
         re.compile(r'\d{1,2}/(\d{4})\s*\([^)]*(?:německo|austria|švýcarsko|francie|itálie)[^)]*\)', re.IGNORECASE),  # "08/2016 (Německo)"
+        # 2-digit years with explicit context: "r.v. 09" → 2009, "rv96" → 1996
+        re.compile(r'(?:rok\s+výroby|r\.?\s?v\.?|výroba)\s*[:.]?\s*(\d{2})(?!\d)', re.IGNORECASE),  # "r.v. 09", "rv 96"
     ]
 
     # MEDIUM confidence - context suggests production year
@@ -58,7 +65,8 @@ class ContextAwarePatterns:
 
     # NEGATIVE patterns - EXCLUDE these (STK, service, repairs, non-year contexts)
     YEAR_EXCLUDE = [
-        re.compile(r'(?:stk|technická|emise|emisní)\s+(?:do|platnost|konec)?\s*(\d{4})', re.IGNORECASE),  # "STK do 2027"
+        # STK / emise — all formats: "STK do 2027", "Stk: 02/2027", "STK 02/2027", "STK platná do 05/2027"
+        re.compile(r'(?:stk|technick[aá]|emise|emisn[ií])\s*(?:kontrola)?\s*(?:platn[aáé]?)?\s*(?:do|platnost|konec)?\s*:?\s*(?:\d{1,2}[/.])?(\d{4})', re.IGNORECASE),
         re.compile(r'(?:servis|serviska|oprava|výměna|vyměněn)\s+(\d{4})', re.IGNORECASE),  # "servis 2023"
         re.compile(r'(?:pneumatiky|pneu|kola|brzdy|motor|převodovka)\s+(?:z|z\s+roku)?\s*(\d{4})', re.IGNORECASE),  # "pneumatiky 2024"
         re.compile(r'nové?\s+(?:od|z)\s+(\d{4})', re.IGNORECASE),  # "nové od 2023"
@@ -162,6 +170,22 @@ class ContextAwarePatterns:
         re.compile(r'\b(\d{1,3})\s?(?:hp|ps|koní|koně|kon)\b', re.IGNORECASE),  # HP/PS/koně
     ]
 
+    @staticmethod
+    def _expand_two_digit_year(year_str: str) -> Optional[int]:
+        """Expand 2-digit year to 4-digit: '09' → 2009, '96' → 1996.
+
+        Returns None if the result falls outside YEAR_MIN..YEAR_MAX.
+        """
+        if len(year_str) == 4:
+            return int(year_str)
+        if len(year_str) == 2:
+            short = int(year_str)
+            # 00-29 → 2000-2029, 30-99 → 1930-1999
+            full = 2000 + short if short <= 29 else 1900 + short
+            if YEAR_MIN <= full <= YEAR_MAX:
+                return full
+        return None
+
     def find_years(self, text: str) -> List[Match]:
         """Find years with confidence scoring"""
         matches = []
@@ -177,10 +201,11 @@ class ContextAwarePatterns:
         for pattern in self.YEAR_HIGH_CONFIDENCE:
             for match in pattern.finditer(text):
                 year_str = match.group(1)
-                if year_str not in excluded_years and 1990 <= int(year_str) <= 2026:
+                expanded = self._expand_two_digit_year(year_str)
+                if expanded and str(expanded) not in excluded_years and YEAR_MIN <= expanded <= YEAR_MAX:
                     matches.append(Match(
-                        text=year_str,
-                        value=int(year_str),
+                        text=str(expanded),
+                        value=expanded,
                         start=match.start(1),
                         end=match.end(1),
                         confidence='high',
@@ -192,10 +217,11 @@ class ContextAwarePatterns:
             for pattern in self.YEAR_MEDIUM_CONFIDENCE:
                 for match in pattern.finditer(text):
                     year_str = match.group(1)
-                    if year_str not in excluded_years and 1990 <= int(year_str) <= 2026:
+                    year_int = int(year_str)
+                    if year_str not in excluded_years and YEAR_MIN <= year_int <= YEAR_MAX:
                         matches.append(Match(
                             text=year_str,
-                            value=int(year_str),
+                            value=year_int,
                             start=match.start(1),
                             end=match.end(1),
                             confidence='medium',
@@ -207,10 +233,11 @@ class ContextAwarePatterns:
             for pattern in self.YEAR_LOW_CONFIDENCE:
                 for match in pattern.finditer(text):
                     year_str = match.group(0)
-                    if year_str not in excluded_years and 1990 <= int(year_str) <= 2026:
+                    year_int = int(year_str)
+                    if year_str not in excluded_years and YEAR_MIN <= year_int <= YEAR_MAX:
                         matches.append(Match(
                             text=year_str,
-                            value=int(year_str),
+                            value=year_int,
                             start=match.start(),
                             end=match.end(),
                             confidence='low',

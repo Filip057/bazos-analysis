@@ -1,0 +1,37 @@
+{
+  "session_id": "20260320_213725",
+  "started_at": "2026-03-20T21:37:25.594361",
+  "last_updated": "2026-03-20T21:37:34.361892",
+  "status": "completed",
+  "brands_done": [],
+  "processed_urls": {
+    "https://auto.bazos.cz/inzerat/216164315/skoda-enyaq-iv60-matrix-kamera-kuze-soh-917.php": "saved",
+    "https://auto.bazos.cz/inzerat/216428363/skoda-kodiaq-style-20-tdi-110kw-4x4-dsg-zaruka-autodraft.php": "saved",
+    "https://auto.bazos.cz/inzerat/216427257/skoda-superb-3-iv-sportline-tsi-160kw-dsg-zaruka-autodraft.php": "saved",
+    "https://auto.bazos.cz/inzerat/215844680/skoda-superb-20-tdi-evo-dsg-matrix-virtual-panorama-kamera.php": "saved",
+    "https://auto.bazos.cz/inzerat/216436151/skoda-octavia-4-combi-20-tdi-85kw-man-zaruka-autodraft.php": "saved",
+    "https://auto.bazos.cz/inzerat/216440568/skoda-octavia-rs-20tdi-135kw-dsg-2019-webasto-canton-kamera.php": "saved",
+    "https://auto.bazos.cz/inzerat/216401927/octavia-iv-20-tdi-85kw-combi-12023-154tkm-cr-1maj.php": "saved",
+    "https://auto.bazos.cz/inzerat/216431553/skoda-fabia-ii-12-benzin-2009-149-tisic-km.php": "saved",
+    "https://auto.bazos.cz/inzerat/216423954/octavia-3-2017-14tsi-kuze-led-acc.php": "saved",
+    "https://auto.bazos.cz/inzerat/216425515/skoda-octavia-3-20tdi-135kw-4x4-lk-dsg-acc-koupcr.php": "saved",
+    "https://auto.bazos.cz/inzerat/216426857/skoda-superb-3-combi-20-tdi-110kw-dsg-zaruka-autodraft.php": "saved",
+    "https://auto.bazos.cz/inzerat/216401983/skoda-karoq-20-tdi-110kw-4x4-dsg-sportline-tazny-virtual.php": "saved",
+    "https://auto.bazos.cz/inzerat/216401547/skoda-octavia-20tdi-110kw-dsg-style.php": "saved",
+    "https://auto.bazos.cz/inzerat/216395414/skoda-superb-20-tsi-162kw-dsg-sportline-zaruka-autodraft.php": "saved",
+    "https://auto.bazos.cz/inzerat/216421986/skoda-rapid-spaceback-12tsi-77kw-ambition.php": "saved",
+    "https://auto.bazos.cz/inzerat/216395639/skoda-fabia-2-combi-14-16v-63-kw-84-877-km.php": "saved",
+    "https://auto.bazos.cz/inzerat/216401102/skoda-superb-combi-iii-20tdi-110kw-dsg-lk-webasto-tazne.php": "saved",
+    "https://auto.bazos.cz/inzerat/216393499/skoda-kodiaq-style-20tsi-140kw-4x4-dsg-tovarni-zaruka.php": "saved",
+    "https://auto.bazos.cz/inzerat/216390244/octavia-iii-20tdi-dsg-110kw-style-2018-146tkm-navi-tz.php": "saved",
+    "https://auto.bazos.cz/inzerat/216393228/skoda-octavia-3-fc-combi-16tdi-85kw-koupcr1maj79000km.php": "saved"
+  },
+  "stats": {
+    "total_processed": 20,
+    "saved": 20,
+    "failed": 0,
+    "filtered": 0,
+    "skipped": 0
+  },
+  "completed_at": "2026-03-20T21:37:34.361858"
+}

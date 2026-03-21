@@ -52,9 +52,23 @@ class DataNormalizer:
     FUEL_ELECTRIC = {'elektro', 'electric', 'ev', 'elektřina', 'bev'}
     FUEL_HYBRID = {'hybrid', 'hybridní', 'hybridním', 'hybridního', 'phev', 'mhev'}
 
+    # Regex patterns for composite engine codes (compiled once)
+    import re as _re
+    _DIESEL_CODE_RE = _re.compile(
+        r'(?:tdi|hdi|cdti|crdi|dci|jtd[m]?|tdci|dti)', _re.IGNORECASE
+    )
+    _BENZIN_CODE_RE = _re.compile(
+        r'(?:tsi|tce|gti|gdi|mpi|fsi|tfsi)', _re.IGNORECASE
+    )
+    _VALID_FUEL_VALUES = {'diesel', 'benzín', 'lpg', 'cng', 'elektro', 'hybrid'}
+
     @staticmethod
     def normalize_fuel(fuel: Optional[str]) -> Optional[str]:
-        """Normalize fuel type to standard values"""
+        """Normalize fuel type to standard values.
+
+        Returns one of: 'diesel', 'benzín', 'lpg', 'cng', 'elektro', 'hybrid', or None.
+        Never returns unknown/raw values — strict whitelist validation.
+        """
         if not fuel:
             return None
 
@@ -74,10 +88,11 @@ class DataNormalizer:
         elif fuel_lower in DataNormalizer.FUEL_HYBRID:
             return 'hybrid'
 
-        # Pattern matching for partial matches
-        if 'diesel' in fuel_lower or 'nafta' in fuel_lower or 'naft' in fuel_lower:
+        # Pattern matching for partial matches (substring search)
+        # Covers typos: "dieslovým", "disel", etc.
+        if 'diesel' in fuel_lower or 'nafta' in fuel_lower or 'naft' in fuel_lower or 'disel' in fuel_lower or 'diesl' in fuel_lower:
             return 'diesel'
-        elif 'benz' in fuel_lower:
+        elif 'benz' in fuel_lower or 'bezín' in fuel_lower or 'bezin' in fuel_lower:
             return 'benzín'
         elif 'hybrid' in fuel_lower:
             return 'hybrid'
@@ -88,17 +103,15 @@ class DataNormalizer:
         elif 'elek' in fuel_lower or fuel_lower in ('ev', 'bev'):
             return 'elektro'
 
-        # Filter out obvious non-fuel values
-        import re
-        # If it's just numbers or looks like mileage/displacement
-        if re.match(r'^[\d\.,]+(?:km|tkm|l)?$', fuel_lower):
-            return None
-        # If it contains "dovoz" or other irrelevant terms
-        if any(word in fuel_lower for word in ['dovoz', 'tis', 'tkm', 'litr']):
-            return None
+        # Composite engine codes: "50TDI", "2.0HDi", "1,6CRDi", "BiTDI", etc.
+        if DataNormalizer._DIESEL_CODE_RE.search(fuel_lower):
+            return 'diesel'
+        if DataNormalizer._BENZIN_CODE_RE.search(fuel_lower):
+            return 'benzín'
 
-        # Unknown fuel type - return as is
-        return fuel
+        # Strict validation: if we couldn't map it, return None
+        # This catches power values (180kw), part codes (M54B25), random text, etc.
+        return None
 
     @staticmethod
     def normalize_mileage(mileage: any) -> Optional[int]:
@@ -152,21 +165,32 @@ class DataNormalizer:
 
     @staticmethod
     def normalize_year(year: any) -> Optional[int]:
-        """Normalize year to integer"""
+        """Normalize year to integer with range validation.
+
+        Returns None if year is outside plausible car range (1990..current_year+1).
+        """
+        from datetime import datetime
+        max_year = datetime.now().year + 1
+
         if not year:
             return None
 
+        value = None
+
         # Already a number
         if isinstance(year, (int, float)):
-            return int(year)
+            value = int(year)
 
         # String - parse it
-        if isinstance(year, str):
+        elif isinstance(year, str):
             import re
             match = re.search(r'(\d{4})', year)
             if match:
-                return int(match.group(1))
+                value = int(match.group(1))
 
+        # Range validation — reject impossible years
+        if value is not None and 1990 <= value <= max_year:
+            return value
         return None
 
 
@@ -481,12 +505,13 @@ class ProductionExtractor:
         # Match both nouns and adjectives (benzín, benzínový, dieselový, etc.)
         # Includes diesel engine codes (TDI, HDi, CDTi, CRDi, dCi, JTD)
         # and hybrid variants (PHEV, MHEV)
+        # Note: engine codes like TDI/HDi can appear inside composite tokens (e.g. "2.0TDI"),
+        # so we use a looser boundary for those — just capture the code part.
         import re
         fuel_pattern = re.compile(
             r'\b(benzin(?:ový|ového|ovým|ové|ovém)?|benzín(?:ový|ového|ovým|ové|ovém)?|'
             r'nafta|naftový(?:ho|mu|m|ém)?|diesel(?:ový|ového|ovým|ové)?|'
             r'dýzl|naftak|turbodiesel|'
-            r'tdi|tsi|hdi|cdti|crdi|dci|jtd[m]?|tdci|'  # diesel/petrol engine codes
             r'hybrid(?:ní|ním|ního)?|phev|mhev|'  # hybrid variants
             r'elektro|electric|ev|bev|'  # electric variants
             r'lpg|cng|plyn|e85)\b',  # gas/alternative fuels
@@ -494,8 +519,17 @@ class ProductionExtractor:
         )
         fuel_match = fuel_pattern.search(text)
         if fuel_match:
-            # Store RAW matched text (preserve variations like "dieselový", "benzínový")
             result['fuel'] = fuel_match.group(1)
+        else:
+            # Try engine codes that may be embedded in composite tokens (e.g. "2.0TDI", "50TDI")
+            engine_code_pattern = re.compile(
+                r'(tdi|tsi|hdi|cdti|crdi|dci|jtd[m]?|tdci|dti|'
+                r'tce|gti|gdi|mpi|fsi|tfsi)',
+                re.IGNORECASE
+            )
+            code_match = engine_code_pattern.search(text)
+            if code_match:
+                result['fuel'] = code_match.group(1)
 
         return result
 

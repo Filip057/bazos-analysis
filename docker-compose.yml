@@ -1,0 +1,38 @@
+services:
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-bazos_root_pass}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-bazos_cars}
+      MYSQL_USER: ${MYSQL_USER:-bazos}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-bazos_pass}
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./migrations/init_database.sql:/docker-entrypoint-initdb.d/01_init.sql
+      - ./migrations/add_fuel_scraped_at.sql:/docker-entrypoint-initdb.d/02_fuel_scraped.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8000}:8000"
+    env_file:
+      - .env
+    environment:
+      FLASK_ENV: production
+      MYSQL_HOST: db
+      MYSQL_PORT: "3306"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  mysql_data:

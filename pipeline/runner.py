@@ -69,6 +69,7 @@ from scraper.data_scrap import (
 from scraper.database_operations import (
     check_if_car,
     compute_derived_metrics,
+    validate_year,
     get_model_id_sync,
     Session,
     UNIQUE_ID_PATTERN,
@@ -207,26 +208,40 @@ class PipelineRunner:
             logger.info(f"URL limit: {url_limit} (test mode)")
 
         total_processed = 0
-        for brand, brand_url in brand_list:
+        total_brands = len(brand_list)
+        for brand_idx, (brand, brand_url) in enumerate(brand_list, 1):
             if self.checkpoint.is_brand_done(brand):
-                logger.info(f"  Skipping brand '{brand}' (already completed in this session)")
+                logger.info(f"  [{brand_idx}/{total_brands}] Skipping '{brand}' (already completed)")
                 self._runtime_stats["skipped"] += 1
                 continue
 
             try:
-                logger.info(f"  Processing brand: {brand}")
+                brand_start = time.time()
+                logger.info(f"  [{brand_idx}/{total_brands}] Processing brand: {brand}")
+                saved_before = self._runtime_stats["saved"]
+                filtered_before = self._runtime_stats["filtered"]
+                failed_before = self._runtime_stats["failed"]
+
                 processed = await self._process_brand(brand, brand_url, http_session, semaphore, db_pool, url_limit=url_limit, total_processed=total_processed)
                 total_processed += processed
+
+                brand_elapsed = time.time() - brand_start
+                brand_saved = self._runtime_stats["saved"] - saved_before
+                brand_filtered = self._runtime_stats["filtered"] - filtered_before
+                brand_failed = self._runtime_stats["failed"] - failed_before
+                logger.info(
+                    f"  [{brand_idx}/{total_brands}] Brand '{brand}' done in {brand_elapsed:.0f}s "
+                    f"— saved={brand_saved}, filtered={brand_filtered}, failed={brand_failed}"
+                )
 
                 if url_limit and total_processed >= url_limit:
                     logger.info(f"URL limit ({url_limit}) reached. Stopping.")
                     break
 
                 self.checkpoint.mark_brand_done(brand)
-                logger.info(f"  Brand '{brand}' done.")
             except Exception as e:
                 # Brand-level error: log and continue with next brand
-                logger.error(f"  Brand '{brand}' failed unexpectedly: {e}. Continuing...")
+                logger.error(f"  [{brand_idx}/{total_brands}] Brand '{brand}' failed: {e}. Continuing...")
 
     async def _process_brand(self, brand, brand_url, http_session, semaphore, db_pool, url_limit=None, total_processed=0):
         """
@@ -331,7 +346,7 @@ class PipelineRunner:
 
             car_data = {
                 "brand": brand,
-                "model": get_model(brand=brand, header=heading),
+                "model": get_model(brand=brand, header=heading, description=description),
                 "year_manufacture": extraction.get("year"),
                 "mileage": extraction.get("mileage"),
                 "power": extraction.get("power"),
@@ -376,8 +391,11 @@ class PipelineRunner:
         unique_id_match = UNIQUE_ID_PATTERN.search(car_data["url"])
         unique_id = unique_id_match.group(1) if unique_id_match else None
 
+        # Validate year before DB insert
+        validated_year = validate_year(car_data["year_manufacture"])
+
         years_in_usage, price_per_km, mileage_per_year = compute_derived_metrics(
-            car_data["price"], car_data["mileage"], car_data["year_manufacture"]
+            car_data["price"], car_data["mileage"], validated_year
         )
 
         sql = """
@@ -402,7 +420,7 @@ class PipelineRunner:
             async with conn.cursor() as cur:
                 await cur.execute(sql, (
                     model_id,
-                    car_data["year_manufacture"],
+                    validated_year,
                     car_data["mileage"],
                     car_data["power"],
                     car_data["fuel"],

@@ -301,5 +301,108 @@ class TestRealWorldScenarios:
         assert result.verified is True
 
 
+class TestTwoDigitYearExpansion:
+    """Test 2-digit year handling in regex patterns."""
+
+    def test_two_digit_year_rv09(self):
+        """'r.v. 09' should expand to 2009."""
+        from ml.context_aware_patterns import ContextAwarePatterns
+        patterns = ContextAwarePatterns()
+        matches = patterns.find_years("Škoda Fabia r.v. 09, najeto 120000 km")
+        assert len(matches) >= 1
+        assert matches[0].value == 2009
+
+    def test_two_digit_year_rv96(self):
+        """'rv96' should expand to 1996."""
+        from ml.context_aware_patterns import ContextAwarePatterns
+        patterns = ContextAwarePatterns()
+        matches = patterns.find_years("Ford Escort rv96, benzín")
+        assert len(matches) >= 1
+        assert matches[0].value == 1996
+
+    def test_two_digit_year_rok_vyroby_03(self):
+        """'rok výroby 03' should expand to 2003."""
+        from ml.context_aware_patterns import ContextAwarePatterns
+        patterns = ContextAwarePatterns()
+        matches = patterns.find_years("Renault Clio rok výroby 03")
+        assert len(matches) >= 1
+        assert matches[0].value == 2003
+
+    def test_two_digit_year_high_confidence(self):
+        """2-digit year with r.v. context should be HIGH confidence."""
+        from ml.context_aware_patterns import ContextAwarePatterns
+        patterns = ContextAwarePatterns()
+        matches = patterns.find_years("Opel Astra r.v. 15, diesel")
+        assert len(matches) >= 1
+        assert matches[0].confidence == 'high'
+        assert matches[0].value == 2015
+
+    def test_two_digit_year_too_old_rejected(self):
+        """'r.v. 85' → 1985, below YEAR_MIN=1990 → rejected."""
+        from ml.context_aware_patterns import ContextAwarePatterns
+        patterns = ContextAwarePatterns()
+        matches = patterns.find_years("Trabant r.v. 85")
+        assert len(matches) == 0
+
+
+class TestYearRangeValidation:
+    """Test that impossible years are rejected everywhere."""
+
+    def test_peugeot_5008_not_a_year(self):
+        """Model number 5008 should NOT be extracted as a year."""
+        from ml.context_aware_patterns import ContextAwarePatterns
+        patterns = ContextAwarePatterns()
+        matches = patterns.find_years("Peugeot 5008 1.6 BlueHDi")
+        # 5008 is way outside 1990-2027 range
+        year_values = [m.value for m in matches]
+        assert 5008 not in year_values
+
+    def test_peugeot_2008_ambiguity(self):
+        """'Peugeot 2008' — 2008 is within year range but is a model name.
+        Without year context, it should only be LOW confidence at best."""
+        from ml.context_aware_patterns import ContextAwarePatterns
+        patterns = ContextAwarePatterns()
+        matches = patterns.find_years("Peugeot 2008 1.2 PureTech")
+        # If matched, it should be low confidence (standalone pattern)
+        for m in matches:
+            if m.value == 2008:
+                assert m.confidence == 'low'
+
+    def test_future_year_rejected(self):
+        """Year 2099 should be rejected by all layers."""
+        from ml.context_aware_patterns import ContextAwarePatterns
+        patterns = ContextAwarePatterns()
+        matches = patterns.find_years("Auto rok výroby 2099")
+        assert len(matches) == 0
+
+    def test_normalize_year_rejects_future(self):
+        """normalize_year should reject years beyond current+1."""
+        from ml.production_extractor import DataNormalizer
+        assert DataNormalizer.normalize_year(2099) is None
+        assert DataNormalizer.normalize_year(5008) is None
+
+    def test_normalize_year_accepts_valid(self):
+        """normalize_year should accept valid years."""
+        from ml.production_extractor import DataNormalizer
+        assert DataNormalizer.normalize_year(2015) == 2015
+        assert DataNormalizer.normalize_year("2020") == 2020
+        assert DataNormalizer.normalize_year(1995) == 1995
+
+    def test_normalize_year_rejects_pre_1990(self):
+        """normalize_year should reject years before 1990."""
+        from ml.production_extractor import DataNormalizer
+        assert DataNormalizer.normalize_year(1985) is None
+        assert DataNormalizer.normalize_year(1900) is None
+
+    def test_db_validate_year(self):
+        """Database layer should reject invalid years."""
+        from scraper.database_operations import validate_year
+        assert validate_year(2015) == 2015
+        assert validate_year(5008) is None
+        assert validate_year(2099) is None
+        assert validate_year(1989) is None
+        assert validate_year(None) is None
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

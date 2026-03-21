@@ -31,15 +31,19 @@ MODEL_ALIASES = {
 
     # Ford — spacing/dash
     'c max': 'c-max', 'cmax': 'c-max',
+    'grand c max': 'grand c-max', 'grand cmax': 'grand c-max',
     'b max': 'b-max', 'bmax': 'b-max',
     's max': 's-max', 'smax': 's-max',
     'ka+': 'ka',
+    'tourneo custom': 'tourneo custom',
 
     # Volkswagen — spacing/dot variants
     'id 3': 'id.3', 'id3': 'id.3',
     'id 4': 'id.4', 'id4': 'id.4',
     'id 5': 'id.5', 'id5': 'id.5',
     't roc': 't-roc', 'troc': 't-roc',
+    't cross': 't-cross', 'tcross': 't-cross',
+    'tiguan allspace': 'tiguan allspace',
 
     # BMW — common ways people write series
     'rada 1': '1 series', 'řada 1': '1 series', '1er': '1 series', '1 rada': '1 series',
@@ -58,6 +62,7 @@ MODEL_ALIASES = {
     'trida e': 'e-class', 'třída e': 'e-class', 'e class': 'e-class',
     'trida s': 's-class', 'třída s': 's-class', 's class': 's-class',
     'trida v': 'v-class', 'třída v': 'v-class', 'v class': 'v-class',
+    'trida r': 'r-class', 'třída r': 'r-class', 'r class': 'r-class',
 
     # Hyundai — spacing
     'ix 20': 'ix20', 'ix 35': 'ix35',
@@ -71,6 +76,11 @@ MODEL_ALIASES = {
     'c elysee': 'c-elysee', 'celysee': 'c-elysee',
     'grand c4': 'grand c4 spacetourer',
     'c4 spacetourer': 'grand c4 spacetourer',
+    'grand c4 picasso': 'grand c4 picasso',
+    'c3 picasso': 'c3 picasso',
+    'c4 picasso': 'c4 picasso',
+    'xsara picasso': 'xsara picasso',
+    'c 4x': 'c4x',
 
     # Suzuki — dash/spacing
     'sx4 s cross': 'sx4 s-cross', 'sx4 scross': 'sx4 s-cross',
@@ -80,11 +90,13 @@ MODEL_ALIASES = {
     # Honda — dash
     'cr v': 'cr-v', 'crv': 'cr-v',
     'hr v': 'hr-v', 'hrv': 'hr-v',
+    'zr v': 'zr-v', 'zrv': 'zr-v',
     'cr z': 'cr-z', 'crz': 'cr-z',
 
     # Renault — accent variants
     'mégane': 'megane', 'mégané': 'megane',
-    'scénic': 'scenic',
+    'scénic': 'scenic', 'grand scénic': 'grand scenic',
+    'grand scenic': 'grand scenic',
     'zoé': 'zoe',
 
     # Nissan — dash
@@ -120,26 +132,26 @@ MODEL_ALIASES = {
 CAR_MODELS = {
     'alfa': ['giulia', 'stelvio', 'giulietta', 'mito', '147', '156', '159', 'brera', 'spider', 'tonale'],
     'audi': ['a1', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'q2', 'q3', 'q5', 'q7', 'q8', 'tt', 'r8', 's3', 's4', 's5', 's6', 's7', 's8', 'rs3', 'rs4', 'rs5', 'rs6', 'rs7', 'rsq3', 'e-tron', 'sq5', 'sq7', 'sq8', 'q4 e-tron'],
-    'bmw': ['1 series', '2 series', '3 series', '4 series', '5 series', '6 series', '7 series', '8 series', 'i3', 'i8', 'm2', 'm3', 'm4', 'm5', 'm6', 'x1', 'x2', 'x3', 'x4', 'x5', 'x6', 'x7', 'z4', 'ix', 'i4'],
-    'citroen': ['c1', 'c3', 'c4', 'c5', 'berlingo', 'cactus', 'ds3', 'ds4', 'ds5', 'grand c4 spacetourer', 'c2', 'c-elysee', 'jumpy', 'jumper', 'xsara', 'saxo', 'c4 aircross'],
+    'bmw': ['1 series', '2 series', '3 series', '4 series', '5 series', '6 series', '7 series', '8 series', 'i3', 'i4', 'i7', 'i8', 'ix', 'ix3', 'm2', 'm3', 'm4', 'm5', 'm6', 'x1', 'x2', 'x3', 'x4', 'x5', 'x6', 'x7', 'z3', 'z4'],
+    'citroen': ['c1', 'c2', 'c3', 'c3 picasso', 'c4', 'c4 picasso', 'c4x', 'c5', 'c-elysee', 'berlingo', 'cactus', 'ds3', 'ds4', 'ds5', 'grand c4 spacetourer', 'grand c4 picasso', 'jumpy', 'jumper', 'xsara', 'xsara picasso', 'saxo', 'c4 aircross'],
     'dacia': ['logan', 'sandero', 'duster', 'lodgy', 'dokker', 'spring', 'jogger'],
-    'fiat': ['500', '500x', '500l', 'panda', 'punto', 'tipo', '500c', '500l living', '500e', 'bravo', 'doblo', 'ducato', 'grande punto', 'stilo', 'fiorino', 'linea'],
-    'ford': ['fiesta', 'focus', 'mondeo', 'mustang', 'ka', 'kuga', 'ecosport', 'edge', 's-max', 'galaxy', 'ranger', 'transit', 'puma', 'c-max', 'b-max', 'transit connect', 'tourneo'],
-    'honda': ['civic', 'accord', 'cr-v', 'hr-v', 'jazz', 'nsx', 's2000', 'cr-z', 'insight'],
-    'hyundai': ['i10', 'i20', 'i30', 'i40', 'ioniq', 'kona', 'nexo', 'tucson', 'santa fe', 'ioniq electric', 'accent', 'getz', 'ix20', 'ix35', 'bayon'],
-    'chevrolet': ['spark', 'aveo', 'cruze', 'malibu', 'camaro', 'corvette', 'trax', 'equinox', 'captiva', 'orlando', 'blazer', 'tahoe', 'suburban', 'lacetti', 'matiz', 'nubira', 'kalos'],
+    'fiat': ['500', '500x', '500l', '500c', '500l living', '500e', 'panda', 'punto', 'tipo', 'bravo', 'doblo', 'ducato', 'grande punto', 'stilo', 'fiorino', 'linea', 'talento'],
+    'ford': ['fiesta', 'focus', 'mondeo', 'mustang', 'ka', 'kuga', 'ecosport', 'edge', 'explorer', 's-max', 'galaxy', 'ranger', 'transit', 'puma', 'c-max', 'grand c-max', 'b-max', 'transit connect', 'tourneo', 'tourneo custom'],
+    'honda': ['civic', 'accord', 'cr-v', 'hr-v', 'zr-v', 'jazz', 'nsx', 's2000', 'cr-z', 'insight', 'legend'],
+    'hyundai': ['i10', 'i20', 'i30', 'i40', 'ioniq', 'kona', 'nexo', 'tucson', 'santa fe', 'ioniq electric', 'accent', 'getz', 'ix20', 'ix35', 'bayon', 'h1'],
+    'chevrolet': ['spark', 'aveo', 'cruze', 'malibu', 'camaro', 'corvette', 'trax', 'equinox', 'captiva', 'orlando', 'blazer', 'tahoe', 'suburban', 'silverado', 'impala', 'lacetti', 'matiz', 'nubira', 'kalos'],
     'kia': ['picanto', 'rio', 'ceed', 'optima', 'stinger', 'sportage', 'sorento', 'niro', 'soul', 'stonic', 'carens', 'proceed', 'venga', 'xceed', 'ev6'],
-    'mercedes': ['a-class', 'b-class', 'c-class', 'e-class', 's-class', 'cla', 'cls', 'gla', 'glb', 'glc', 'gle', 'glc coupe', 'gle coupe', 'gls', 'slc', 'slk', 'sl', 'amg gt', 'eqa', 'eqb', 'eqc', 'v-class', 'vito', 'sprinter'],
-    'mitsubishi': ['space star', 'asx', 'eclipse cross', 'outlander', 'pajero', 'l200', 'carisma', 'colt', 'galant', 'lancer', 'grandis'],
-    'nissan': ['micra', 'leaf', 'note', 'juke', 'qashqai', 'x-trail', 'pulsar', 'pathfinder', '370z', 'gt-r', 'nv200', 'almera', 'navara', 'primera', 'murano', 'cube'],
-    'opel': ['corsa', 'astra', 'insignia', 'mokka', 'crossland x', 'grandland x', 'zafira', 'adam', 'agila', 'combo', 'karl', 'meriva', 'vivaro', 'cascada', 'ampera'],
-    'peugeot': ['108', '208', '308', '508', '2008', '3008', '5008', 'partner', 'traveller', 'rifter', 'expert', 'boxer', '106', '206', '207', '301', '306', '307', '407', '607', '807', 'rcz', '4008'],
-    'renault': ['twingo', 'clio', 'captur', 'megane', 'scenic', 'kadjar', 'espace', 'talisman', 'koleos', 'zoe', 'kangoo', 'laguna', 'master', 'trafic', 'fluence'],
+    'mercedes': ['a-class', 'b-class', 'c-class', 'e-class', 's-class', 'r-class', 'cla', 'cls', 'gla', 'glb', 'glc', 'gle', 'glc coupe', 'gle coupe', 'gls', 'gl', 'ml', 'slc', 'slk', 'sl', 'amg gt', 'eqa', 'eqb', 'eqc', 'eqe', 'eqs', 'v-class', 'vito', 'sprinter'],
+    'mitsubishi': ['space star', 'asx', 'eclipse cross', 'outlander', 'pajero', 'l200', 'carisma', 'colt', 'galant', 'lancer', 'grandis', 'fuso'],
+    'nissan': ['micra', 'leaf', 'note', 'juke', 'qashqai', 'x-trail', 'pulsar', 'pathfinder', 'patrol', '370z', 'gt-r', 'nv200', 'almera', 'almera tino', 'navara', 'primera', 'murano', 'cube'],
+    'opel': ['corsa', 'astra', 'insignia', 'mokka', 'crossland x', 'grandland x', 'zafira', 'adam', 'agila', 'combo', 'karl', 'meriva', 'vivaro', 'movano', 'cascada', 'ampera'],
+    'peugeot': ['106', '107', '108', '206', '207', '208', '301', '306', '307', '308', '407', '408', '508', '607', '807', '2008', '3008', '4008', '5008', 'partner', 'traveller', 'rifter', 'expert', 'boxer', 'rcz'],
+    'renault': ['twingo', 'clio', 'captur', 'megane', 'scenic', 'grand scenic', 'kadjar', 'espace', 'talisman', 'koleos', 'zoe', 'kangoo', 'laguna', 'master', 'trafic', 'fluence'],
     'seat': ['mii', 'ibiza', 'leon', 'toledo', 'arona', 'ateca', 'alhambra', 'tarraco', 'cordoba', 'cupra formentor', 'cupra born'],
-    'suzuki': ['ignis', 'swift', 'baleno', 'vitara', 'sx4 s-cross', 's-cross', 'jimny', 'celerio', 'grand vitara', 'splash', 'alto', 'liana', 'sx4'],
-    'skoda': ['citigo', 'fabia', 'scala', 'octavia', 'superb', 'kamiq', 'karoq', 'kodiaq', 'rapid', 'yeti', 'enyaq', 'roomster'],
-    'toyota': ['aygo', 'yaris', 'auris', 'corolla', 'prius', 'avensis', 'chr', 'rav4', 'highlander', 'land cruiser', 'hilux', 'camry', 'supra', 'proace'],
-    'volkswagen': ['up', 'polo', 'golf', 'passat', 'arteon', 't-roc', 'tiguan', 'touareg', 'touran', 'sharan', 'beetle', 'jetta', 'caddy', 'california', 'multivan', 'caravelle', 'amarok', 'cc', 'transporter', 'crafter', 'scirocco', 'lupo', 'id.3', 'id.4', 'id.5'],
-    'volvo': ['v40', 'v60', 'v90', 's60', 's90', 'xc40', 'xc60', 'xc90', 'v70', 'xc70', 'c30', 'c70', 's40', 's80'],
-    'mazda': ['2', '3', '6', 'cx-3', 'cx-4', 'cx-5', 'cx-8', 'cx-9', 'mx-5', 'cx-7', 'cx3', 'cx5', 'cx8', '323', '5', 'cx-30', 'rx-8', 'mpv', 'premacy']
+    'suzuki': ['ignis', 'swift', 'baleno', 'vitara', 'sx4 s-cross', 's-cross', 'jimny', 'celerio', 'grand vitara', 'splash', 'alto', 'liana', 'sx4', 'kizashi'],
+    'skoda': ['citigo', 'fabia', 'scala', 'octavia', 'superb', 'kamiq', 'karoq', 'kodiaq', 'rapid', 'yeti', 'enyaq', 'roomster', 'felicia'],
+    'toyota': ['aygo', 'yaris', 'auris', 'corolla', 'prius', 'avensis', 'chr', 'rav4', 'highlander', 'land cruiser', 'hilux', 'camry', 'supra', 'proace', 'proace verso', 'verso', 'urban cruiser'],
+    'volkswagen': ['up', 'polo', 'golf', 'passat', 'arteon', 't-roc', 't-cross', 'tiguan', 'tiguan allspace', 'touareg', 'touran', 'sharan', 'beetle', 'jetta', 'caddy', 'california', 'multivan', 'caravelle', 'amarok', 'cc', 'transporter', 'crafter', 'scirocco', 'lupo', 'id.3', 'id.4', 'id.5', 'bora', 'phaeton', 'eos', 'fox'],
+    'volvo': ['v40', 'v50', 'v60', 'v70', 'v90', 's40', 's60', 's80', 's90', 'xc40', 'xc60', 'xc70', 'xc90', 'c30', 'c70'],
+    'mazda': ['2', '3', '5', '6', '323', 'cx-3', 'cx-4', 'cx-5', 'cx-7', 'cx-8', 'cx-9', 'cx-30', 'mx-5', 'rx-8', 'mpv', 'premacy']
 }
