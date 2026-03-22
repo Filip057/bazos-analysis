@@ -1,0 +1,16 @@
+{
+  "session_id": "20260321_220051",
+  "started_at": "2026-03-21T22:00:51.498626",
+  "last_updated": "2026-03-21T22:00:51.750729",
+  "status": "completed",
+  "brands_done": [],
+  "processed_urls": {},
+  "stats": {
+    "total_processed": 0,
+    "saved": 0,
+    "failed": 0,
+    "filtered": 0,
+    "skipped": 0
+  },
+  "completed_at": "2026-03-21T22:00:51.750724"
+}

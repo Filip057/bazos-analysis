@@ -62,7 +62,7 @@ Three normalized tables + one view for API compatibility:
 
 1. **Never modify ML models** (`car_ner_model/`, `ml_models/`) without explicit user approval.
    Ask first, explain what you want to change and why.
-2. **Never overwrite or edit existing migration files** in `migrations/`.
+2. **Never overwrite or edit existing migration files** in `migrations/`.p
    Always create new migration files for schema changes.
 3. **Test-first development**: Write or update tests before implementing changes.
 4. **No direct DB writes in Flask routes** — use the database layer in `database/`.

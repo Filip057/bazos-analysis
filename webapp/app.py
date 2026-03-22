@@ -18,6 +18,7 @@ from sqlalchemy.exc import NoResultFound, SQLAlchemyError
 
 from database.model import Base, Car, init_database
 from webapp.config import get_config
+from webapp.deal_detection import find_deals, score_single_offer
 
 # Configure logging
 logging.basicConfig(
@@ -425,6 +426,75 @@ def stats_price_distribution():
 @app.route('/car-compare')
 def car_comparison():
     return render_template('car-compare.html')
+
+
+@app.route("/deals")
+def deals_page():
+    """Underpriced offers browser."""
+    return render_template("deals.html")
+
+
+# =============================================================================
+# DEALS API — underpriced offer detection
+# =============================================================================
+
+@app.route("/api/deals")
+@limiter.limit("30 per minute")
+def api_deals():
+    """
+    Find underpriced offers compared to their market segment.
+
+    Query params:
+        brand (str): optional filter
+        model (str): optional filter
+        fuel (str): optional filter
+        min_score (float): minimum deal score % (default 15)
+        page (int): page number (default 1)
+        per_page (int): results per page (default 20, max 100)
+    """
+    try:
+        brand = request.args.get("brand")
+        model = request.args.get("model")
+        fuel = request.args.get("fuel")
+        min_score = request.args.get("min_score", 15, type=float)
+        page = max(request.args.get("page", 1, type=int), 1)
+        per_page = min(max(request.args.get("per_page", 20, type=int), 1), 100)
+
+        with get_db_session() as session:
+            result = find_deals(
+                session,
+                brand=brand,
+                model=model,
+                fuel=fuel,
+                min_score=min_score,
+                limit=per_page,
+                offset=(page - 1) * per_page,
+            )
+            return jsonify(result)
+
+    except SQLAlchemyError as e:
+        logger.error(f"DB error in api_deals: {e}")
+        return jsonify({"error": "Database error"}), 500
+
+
+@app.route("/api/deals/<int:car_id>")
+@limiter.limit("60 per minute")
+def api_deal_detail(car_id: int):
+    """
+    Deal analysis for a single offer against its market segment.
+
+    Returns deal score, median price, quartiles, and segment size.
+    """
+    try:
+        with get_db_session() as session:
+            result = score_single_offer(session, car_id)
+            if result is None:
+                return jsonify({"error": "Car not found or not enough comparable data"}), 404
+            return jsonify(result)
+
+    except SQLAlchemyError as e:
+        logger.error(f"DB error in api_deal_detail: {e}")
+        return jsonify({"error": "Database error"}), 500
 
 
 # ------  FORM CLASS ----------

@@ -1,0 +1,10 @@
+{
+  "n_iter": 30,
+  "n_examples": 10644,
+  "labels": [
+    "FUEL",
+    "MILEAGE",
+    "POWER",
+    "YEAR"
+  ]
+}

@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <title>Výhodné nabídky – Bazos Analysis</title>
+    <link href="/static/css/styles.css" rel="stylesheet" />
+    <style>
+        .deal-card {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 1.25rem 1.5rem;
+            background: #fff;
+            margin-bottom: 1rem;
+        }
+        .deal-card .value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #0d6efd;
+        }
+        .deal-card .label {
+            font-size: 0.85rem;
+            color: #6c757d;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+        }
+        .badge-score {
+            font-size: 0.82rem;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 12px;
+        }
+        .score-great { background: #0f5132; color: #fff; }
+        .score-good  { background: #198754; color: #fff; }
+        .score-fair  { background: #ffc107; color: #212529; }
+        .deals-table td, .deals-table th { font-size: 0.88rem; vertical-align: middle; }
+        .deals-table .price { font-weight: 600; color: #198754; }
+        .deals-table .median { color: #6c757d; font-size: 0.82rem; }
+        .loading { color: #6c757d; font-style: italic; font-size: 0.85rem; }
+        .filter-bar { background: #f8f9fa; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; }
+    </style>
+</head>
+<body>
+<div class="d-flex" id="wrapper">
+    <!-- Sidebar -->
+    <div class="border-end bg-white" id="sidebar-wrapper">
+        <div class="sidebar-heading border-bottom bg-light">MENU</div>
+        <div class="list-group list-group-flush">
+            <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/">Home</a>
+            <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/dashboard">Dashboard</a>
+            <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/car-compare">Car compare</a>
+            <a class="list-group-item list-group-item-action list-group-item-light p-3 active" href="/deals">Výhodné nabídky</a>
+        </div>
+    </div>
+
+    <!-- Page content -->
+    <div id="page-content-wrapper">
+        <!-- Top nav -->
+        <nav class="navbar navbar-expand-lg navbar-light bg-light border-bottom">
+            <div class="container-fluid">
+                <button class="btn btn-sm btn-outline-secondary me-2" id="sidebarToggle">&#9776;</button>
+                <span class="navbar-brand mb-0 h6">Bazos Analysis — Výhodné nabídky</span>
+            </div>
+        </nav>
+
+        <!-- Main content -->
+        <div class="container-fluid p-4">
+
+            <!-- KPI cards -->
+            <div class="row g-3 mb-4">
+                <div class="col-6 col-md-3">
+                    <div class="deal-card">
+                        <div class="value" id="kpi-total-deals">…</div>
+                        <div class="label">Nalezených dealů</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="deal-card">
+                        <div class="value" id="kpi-avg-score">…</div>
+                        <div class="label">Průměrná sleva</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="deal-card">
+                        <div class="value" id="kpi-best-score">…</div>
+                        <div class="label">Nejlepší deal</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="deal-card">
+                        <div class="value" id="kpi-best-brand">…</div>
+                        <div class="label">Značka s nejvíce dealy</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="filter-bar">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-2">
+                        <label class="form-label small fw-semibold text-muted">Značka</label>
+                        <select id="filter-brand" class="form-select form-select-sm">
+                            <option value="">— všechny —</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-semibold text-muted">Model</label>
+                        <select id="filter-model" class="form-select form-select-sm" disabled>
+                            <option value="">— všechny —</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-semibold text-muted">Palivo</label>
+                        <select id="filter-fuel" class="form-select form-select-sm">
+                            <option value="">— všechny —</option>
+                            <option value="diesel">Diesel</option>
+                            <option value="benzín">Benzín</option>
+                            <option value="lpg">LPG</option>
+                            <option value="cng">CNG</option>
+                            <option value="elektro">Elektro</option>
+                            <option value="hybrid">Hybrid</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-semibold text-muted">Min. sleva %</label>
+                        <input id="filter-min-score" type="number" class="form-control form-control-sm" value="15" min="5" max="90" step="5">
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-primary btn-sm w-100" onclick="loadDeals()">Hledat</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results table -->
+            <div class="table-responsive">
+                <table class="table table-hover deals-table">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Značka / Model</th>
+                            <th>Rok</th>
+                            <th class="text-end">Km</th>
+                            <th>Palivo</th>
+                            <th class="text-end">Cena</th>
+                            <th class="text-end">Medián trhu</th>
+                            <th class="text-center">Deal score</th>
+                            <th class="text-center">Segment</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="deals-body">
+                        <tr><td colspan="9" class="loading text-center">Načítám…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            <div class="d-flex justify-content-between align-items-center mt-2">
+                <span class="text-muted small" id="pagination-info"></span>
+                <div>
+                    <button class="btn btn-sm btn-outline-secondary" id="btn-prev" disabled onclick="changePage(-1)">Předchozí</button>
+                    <button class="btn btn-sm btn-outline-secondary" id="btn-next" disabled onclick="changePage(1)">Další</button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+let currentPage = 1;
+const perPage = 20;
+
+// Formatters
+const fmt = {
+    num: v => v != null ? v.toLocaleString('cs-CZ') : '–',
+    price: v => v != null ? Math.round(v).toLocaleString('cs-CZ') + ' Kč' : '–',
+    km: v => v != null ? Math.round(v).toLocaleString('cs-CZ') + ' km' : '–',
+    pct: v => v != null ? v.toFixed(1) + ' %' : '–',
+};
+
+function scoreBadge(score) {
+    let cls = 'score-fair';
+    if (score >= 40) cls = 'score-great';
+    else if (score >= 25) cls = 'score-good';
+    return `<span class="badge-score ${cls}">${score.toFixed(1)} %</span>`;
+}
+
+async function apiFetch(url) {
+    try {
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        return await resp.json();
+    } catch (e) {
+        console.error('API error:', url, e);
+        return null;
+    }
+}
+
+// Load brands dropdown
+async function loadBrands() {
+    const brands = await apiFetch('/api/brands');
+    if (!brands) return;
+    const sel = document.getElementById('filter-brand');
+    brands.forEach(b => {
+        const opt = document.createElement('option');
+        opt.value = b;
+        opt.textContent = b.charAt(0).toUpperCase() + b.slice(1);
+        sel.appendChild(opt);
+    });
+}
+
+// Load models dropdown when brand changes
+async function loadModels() {
+    const brand = document.getElementById('filter-brand').value;
+    const sel = document.getElementById('filter-model');
+    sel.innerHTML = '<option value="">— všechny —</option>';
+
+    if (!brand) {
+        sel.disabled = true;
+        return;
+    }
+
+    const models = await apiFetch(`/api/models/${brand}`);
+    if (!models) return;
+    models.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m;
+        opt.textContent = m;
+        sel.appendChild(opt);
+    });
+    sel.disabled = false;
+}
+
+// Load deals
+async function loadDeals() {
+    const brand = document.getElementById('filter-brand').value;
+    const model = document.getElementById('filter-model').value;
+    const fuel = document.getElementById('filter-fuel').value;
+    const minScore = document.getElementById('filter-min-score').value || 15;
+
+    let url = `/api/deals?page=${currentPage}&per_page=${perPage}&min_score=${minScore}`;
+    if (brand) url += `&brand=${encodeURIComponent(brand)}`;
+    if (model) url += `&model=${encodeURIComponent(model)}`;
+    if (fuel) url += `&fuel=${encodeURIComponent(fuel)}`;
+
+    const data = await apiFetch(url);
+    if (!data) {
+        document.getElementById('deals-body').innerHTML =
+            '<tr><td colspan="9" class="text-center text-danger">Chyba při načítání dat</td></tr>';
+        return;
+    }
+
+    // KPIs
+    const deals = data.deals;
+    const total = data.pagination.total;
+    document.getElementById('kpi-total-deals').textContent = fmt.num(total);
+
+    if (deals.length > 0) {
+        const avgScore = deals.reduce((s, d) => s + d.deal_score, 0) / deals.length;
+        document.getElementById('kpi-avg-score').textContent = avgScore.toFixed(1) + ' %';
+        document.getElementById('kpi-best-score').textContent = deals[0].deal_score.toFixed(1) + ' %';
+
+        // Brand with most deals
+        const brandCounts = {};
+        deals.forEach(d => { brandCounts[d.brand] = (brandCounts[d.brand] || 0) + 1; });
+        const topBrand = Object.entries(brandCounts).sort((a, b) => b[1] - a[1])[0];
+        document.getElementById('kpi-best-brand').textContent = topBrand ? topBrand[0] : '–';
+    } else {
+        document.getElementById('kpi-avg-score').textContent = '–';
+        document.getElementById('kpi-best-score').textContent = '–';
+        document.getElementById('kpi-best-brand').textContent = '–';
+    }
+
+    // Table
+    const tbody = document.getElementById('deals-body');
+    if (deals.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">Žádné výhodné nabídky nenalezeny</td></tr>';
+    } else {
+        tbody.innerHTML = deals.map(d => `
+            <tr>
+                <td class="fw-semibold">${d.brand} ${d.model}</td>
+                <td>${d.year_manufacture ?? '–'}</td>
+                <td class="text-end">${fmt.km(d.mileage)}</td>
+                <td>${d.fuel ?? '–'}</td>
+                <td class="text-end price">${fmt.price(d.price)}</td>
+                <td class="text-end median">${fmt.price(d.median_price)}</td>
+                <td class="text-center">${scoreBadge(d.deal_score)}</td>
+                <td class="text-center"><span class="text-muted small">${d.segment_count} aut</span></td>
+                <td><a href="${d.url}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary">Zobrazit</a></td>
+            </tr>
+        `).join('');
+    }
+
+    // Pagination
+    const pages = data.pagination.pages;
+    document.getElementById('pagination-info').textContent =
+        `Stránka ${currentPage} z ${pages} (${fmt.num(total)} výsledků)`;
+    document.getElementById('btn-prev').disabled = currentPage <= 1;
+    document.getElementById('btn-next').disabled = currentPage >= pages;
+}
+
+function changePage(delta) {
+    currentPage += delta;
+    loadDeals();
+}
+
+// Init
+document.getElementById('sidebarToggle').addEventListener('click', () => {
+    document.getElementById('wrapper').classList.toggle('toggled');
+});
+document.getElementById('filter-brand').addEventListener('change', () => {
+    loadModels();
+    currentPage = 1;
+});
+
+loadBrands();
+loadDeals();
+</script>
+</body>
+</html>

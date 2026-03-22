@@ -1,0 +1,22 @@
+{
+  "session_id": "20260321_220156",
+  "started_at": "2026-03-21T22:01:56.865108",
+  "last_updated": "2026-03-21T22:01:57.823042",
+  "status": "completed",
+  "brands_done": [],
+  "processed_urls": {
+    "https://auto.bazos.cz/inzerat/216476387/skoda-octavia-3-facelift-combi-14-tsi-110-kw.php": "saved",
+    "https://auto.bazos.cz/inzerat/216468652/skoda-kodiaq-iv-sportline-15tsi-150kw-dsg-zaruka-autodraft.php": "saved",
+    "https://auto.bazos.cz/inzerat/216470927/skoda-superb-iv-combi-sportline-tsi-160kw-zaruka-autodraft.php": "saved",
+    "https://auto.bazos.cz/inzerat/216479471/skoda-rapid-spaceback-16tdi-85kw-joy-xenon-tazne-vyhrev.php": "saved",
+    "https://auto.bazos.cz/inzerat/216476355/skoda-scala-10tsi-85kw-koupcr1majitelled2020121tkm.php": "saved"
+  },
+  "stats": {
+    "total_processed": 5,
+    "saved": 5,
+    "failed": 0,
+    "filtered": 0,
+    "skipped": 0
+  },
+  "completed_at": "2026-03-21T22:01:57.823037"
+}
