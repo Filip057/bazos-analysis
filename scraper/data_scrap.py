@@ -270,11 +270,16 @@ async def get_urls_for_details(brand_pages: List[Tuple[str, List[str]]], session
 
 # [(brand, [all detail urls])]
 
+# Pre-compiled patterns for detail page parsing
+_LISTING_DATE_PATTERN = re.compile(r'\[(\d{1,2})\.(\d{1,2})\.\s*(\d{4})\]')
+_VIEW_COUNT_PATTERN = re.compile(r'(\d+)\s+lid[ií]')
+
+
 # scrapping description, heading - CHUNKED PROCESSING
-async def get_descriptions_headings_price(brand_urls: List[Tuple[str, str]], session: aiohttp.ClientSession, semaphore: asyncio.Semaphore) -> List[Tuple[str, str, str, str, int]]:
+async def get_descriptions_headings_price(brand_urls: List[Tuple[str, str]], session: aiohttp.ClientSession, semaphore: asyncio.Semaphore) -> List[Tuple[str, str, str, str, int, Optional[str], Optional[int]]]:
     """Scrape car details with chunked processing"""
 
-    async def fetch_and_process(brand: str, url: str) -> Optional[Tuple[str, str, str, str, int]]:
+    async def fetch_and_process(brand: str, url: str) -> Optional[Tuple[str, str, str, str, int, Optional[str], Optional[int]]]:
         data = await fetch_data(url, session, semaphore)
         if not data:
             return None
@@ -292,7 +297,24 @@ async def get_descriptions_headings_price(brand_urls: List[Tuple[str, str]], ses
             if not is_car:
                 return None
 
-            return brand, url, description, heading, price
+            # Extract listing creation date: [1.2. 2026] in the heading div
+            listing_date = None
+            heading_div = soup.find('div', class_='inzeratydetnadpis')
+            if heading_div:
+                date_match = _LISTING_DATE_PATTERN.search(heading_div.text)
+                if date_match:
+                    day, month, year = date_match.group(1), date_match.group(2), date_match.group(3)
+                    listing_date = f"{year}-{month.zfill(2)}-{day.zfill(2)}"
+
+            # Extract view count: "1959 lidí" in the detail table
+            view_count = None
+            detail_table = soup.find('td', class_='listadvlevo')
+            if detail_table:
+                view_match = _VIEW_COUNT_PATTERN.search(detail_table.text)
+                if view_match:
+                    view_count = int(view_match.group(1))
+
+            return brand, url, description, heading, price, listing_date, view_count
         except (AttributeError, IndexError, ValueError) as e:
             # Silently skip malformed pages
             return None
@@ -308,7 +330,9 @@ async def get_descriptions_headings_price(brand_urls: List[Tuple[str, str]], ses
     return final_list
 
 # processing the string and retrieving the data
-async def process_data(brand: str, url: str, description: str, heading: str, price: int, extractor: ProductionExtractor) -> Dict:
+async def process_data(brand: str, url: str, description: str, heading: str, price: int,
+                       listing_date: Optional[str], view_count: Optional[int],
+                       extractor: ProductionExtractor) -> Dict:
     """Extract structured data from car listing using ML + context-aware regex"""
 
     # Use production extractor (ML + regex) on combined text
@@ -324,12 +348,14 @@ async def process_data(brand: str, url: str, description: str, heading: str, pri
         "year_manufacture": extraction_result.get('year'),
         "mileage": extraction_result.get('mileage'),
         "power": extraction_result.get('power'),
-        "fuel": extraction_result.get('fuel'),  # NEW: fuel type from ML
+        "fuel": extraction_result.get('fuel'),
         "price": price,
         "heading": heading,
         "url": url,
+        "listing_date": listing_date,
+        "view_count": view_count,
         # Additional metadata from extraction
-        "extraction_confidence": extraction_result.get('confidence'),  # high/medium/low
+        "extraction_confidence": extraction_result.get('confidence'),
         "needs_review": extraction_result.get('flagged_for_review', False)
     }
     return car_data
@@ -400,8 +426,8 @@ async def main(skip_db=False, brands=None):
 
         # Step 5: Process data to extract structured information with ML
         logger.info("Extracting car data (ML + context-aware regex)...")
-        tasks = [process_data(brand, url, description, heading, price, extractor)
-                 for brand, url, description, heading, price in descriptions_headings_price_list]
+        tasks = [process_data(brand, url, description, heading, price, listing_date, view_count, extractor)
+                 for brand, url, description, heading, price, listing_date, view_count in descriptions_headings_price_list]
         processed_data = await asyncio.gather(*tasks)
 
         # Step 6: Save extraction queues (training data and disagreements)

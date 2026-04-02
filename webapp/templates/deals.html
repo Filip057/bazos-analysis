@@ -50,6 +50,8 @@
             <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/dashboard">Dashboard</a>
             <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/car-compare">Car compare</a>
             <a class="list-group-item list-group-item-action list-group-item-light p-3 active" href="/deals">Výhodné nabídky</a>
+            <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/admin/browser">Data Browser</a>
+            <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/admin/suspicious">Podezřelé nabídky</a>
         </div>
     </div>
 
@@ -126,6 +128,14 @@
                         <input id="filter-min-score" type="number" class="form-control form-control-sm" value="15" min="5" max="90" step="5">
                     </div>
                     <div class="col-md-2">
+                        <label class="form-label small fw-semibold text-muted">Spolehlivost</label>
+                        <select id="filter-confidence" class="form-select form-select-sm">
+                            <option value="high" selected>Vysoká (rok ±3)</option>
+                            <option value="medium">Střední (rok ±5)</option>
+                            <option value="">Všechny</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
                         <button class="btn btn-primary btn-sm w-100" onclick="loadDeals()">Hledat</button>
                     </div>
                 </div>
@@ -144,11 +154,12 @@
                             <th class="text-end">Medián trhu</th>
                             <th class="text-center">Deal score</th>
                             <th class="text-center">Segment</th>
+                            <th class="text-center">Spolehlivost</th>
                             <th></th>
                         </tr>
                     </thead>
                     <tbody id="deals-body">
-                        <tr><td colspan="9" class="loading text-center">Načítám…</td></tr>
+                        <tr><td colspan="10" class="loading text-center">Načítám…</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -177,6 +188,13 @@ const fmt = {
     km: v => v != null ? Math.round(v).toLocaleString('cs-CZ') + ' km' : '–',
     pct: v => v != null ? v.toFixed(1) + ' %' : '–',
 };
+
+function confidenceBadge(conf) {
+    const labels = { high: 'Vysoká', medium: 'Střední', low: 'Nízká' };
+    const colors = { high: 'success', medium: 'warning', low: 'secondary' };
+    const c = conf || 'low';
+    return `<span class="badge bg-${colors[c]}">${labels[c] || c}</span>`;
+}
 
 function scoreBadge(score) {
     let cls = 'score-fair';
@@ -237,16 +255,18 @@ async function loadDeals() {
     const model = document.getElementById('filter-model').value;
     const fuel = document.getElementById('filter-fuel').value;
     const minScore = document.getElementById('filter-min-score').value || 15;
+    const confidence = document.getElementById('filter-confidence').value;
 
     let url = `/api/deals?page=${currentPage}&per_page=${perPage}&min_score=${minScore}`;
     if (brand) url += `&brand=${encodeURIComponent(brand)}`;
     if (model) url += `&model=${encodeURIComponent(model)}`;
     if (fuel) url += `&fuel=${encodeURIComponent(fuel)}`;
+    if (confidence) url += `&confidence=${confidence}`;
 
     const data = await apiFetch(url);
     if (!data) {
         document.getElementById('deals-body').innerHTML =
-            '<tr><td colspan="9" class="text-center text-danger">Chyba při načítání dat</td></tr>';
+            '<tr><td colspan="10" class="text-center text-danger">Chyba při načítání dat</td></tr>';
         return;
     }
 
@@ -274,7 +294,7 @@ async function loadDeals() {
     // Table
     const tbody = document.getElementById('deals-body');
     if (deals.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">Žádné výhodné nabídky nenalezeny</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">Žádné výhodné nabídky nenalezeny</td></tr>';
     } else {
         tbody.innerHTML = deals.map(d => `
             <tr>
@@ -286,6 +306,7 @@ async function loadDeals() {
                 <td class="text-end median">${fmt.price(d.median_price)}</td>
                 <td class="text-center">${scoreBadge(d.deal_score)}</td>
                 <td class="text-center"><span class="text-muted small">${d.segment_count} aut</span></td>
+                <td class="text-center">${confidenceBadge(d.confidence)}</td>
                 <td><a href="${d.url}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary">Zobrazit</a></td>
             </tr>
         `).join('');

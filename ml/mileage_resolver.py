@@ -62,6 +62,9 @@ class MileageNormalizer:
         'miles': 'mi',
     }
 
+    # Units that mean "thousands of km" — multiply number by 1000
+    THOUSAND_UNITS = {'tkm', 'tis', 'xxx'}
+
     @staticmethod
     def normalize(raw_value: Optional[str]) -> Optional[str]:
         """
@@ -86,30 +89,45 @@ class MileageNormalizer:
         cleaned = re.sub(r'(\d)\s+(\d)', r'\1\2', cleaned)
 
         # Extract number and unit
-        match = re.match(r'(\d+)\s*([a-z]+)', cleaned)
+        match = re.match(r'(\d+)\s*([a-z]*)', cleaned)
         if not match:
             return None
 
         number = match.group(1)
         unit = match.group(2)
 
-        # Normalize unit
-        normalized_unit = MileageNormalizer.UNITS.get(unit)
-        if not normalized_unit:
-            return None
+        # Normalize unit (default to km if no unit provided)
+        if not unit:
+            normalized_unit = 'km'
+        elif unit in MileageNormalizer.THOUSAND_UNITS:
+            number = str(int(number) * 1000)
+            normalized_unit = 'km'
+        else:
+            normalized_unit = MileageNormalizer.UNITS.get(unit)
+            if not normalized_unit:
+                return None
 
         return f"{number}{normalized_unit}"
 
     @staticmethod
     def extract_numeric(raw_value: Optional[str]) -> Optional[int]:
-        """Extract numeric value from mileage string."""
+        """Extract numeric value from mileage string, handling thousand-units."""
         if not raw_value or not isinstance(raw_value, str):
             return None
 
         # Remove spaces between digits first
         cleaned = re.sub(r'(\d)\s+(\d)', r'\1\2', raw_value)
-        match = re.search(r'(\d+)', cleaned)
-        return int(match.group(1)) if match else None
+        match = re.match(r'(\d+)\s*([a-z]*)', cleaned.strip().lower())
+        if not match:
+            return None
+
+        number = int(match.group(1))
+        unit = match.group(2)
+
+        if unit in MileageNormalizer.THOUSAND_UNITS:
+            number *= 1000
+
+        return number
 
 
 class MileageResolver:

@@ -58,6 +58,47 @@ _PARTS_PHRASES = re.compile(
     re.IGNORECASE,
 )
 
+# Wheel/rim spec patterns in heading (e.g., "7,5jx18", "5x112", "R16 sada")
+_WHEEL_SPEC_PATTERNS = re.compile(
+    r'(?:'
+    r'\d+[,.]?\d*\s*[jJ]\s*[xX]\s*\d+'       # "7,5jx18", "6Jx15"
+    r'|(?:^|\s)\d+[xX]\d{2,3}(?:\s|$)'        # "5x112", "5x100" (bolt pattern)
+    r'|\bR\d{2}\b'                              # "R16", "R18" (rim size)
+    r'|\b[rR]?\d{2}"'                           # 18", r17" (inch notation)
+    r')',
+    re.IGNORECASE,
+)
+
+# Description-level patterns (checked on description text, not heading)
+_DESC_PARTS_PHRASES = re.compile(
+    r'(?:'
+    r'na\s+d[ií]ly'                             # "na díly"
+    r'|na\s+opravu'                             # "na opravu"
+    r'|nem[aá]\s+papíry|bez\s+papír[uů]'       # "nemá papíry", "bez papírů"
+    r'|bez\s+TP|nem[aá]\s+TP'                  # "bez TP", "nemá TP"
+    r'|bez\s+(?:technick[eé]ho\s+)?pr[uů]kazu' # "bez průkazu", "bez technického průkazu"
+    r'|nosn[yý]\s+r[aá]m|[šs]asi'             # "nosný rám", "šasi" (chassis for sale)
+    r')',
+    re.IGNORECASE,
+)
+
+# Heading starts with a component name (selling a part, not a car)
+_HEADING_STARTS_WITH_PART = re.compile(
+    r'^\s*(?:motor|převodovka|p[rř]evodovka|turbo|kompresor)\s',
+    re.IGNORECASE,
+)
+
+# Installment/financing listings — price is just a down payment, not real car price
+_INSTALLMENT_PATTERNS = re.compile(
+    r'(?:'
+    r'na\s+spl[aá]tky'                         # "na splátky"
+    r'|akontace'                                # "akontace"
+    r'|bez\s+nahl[ií][zž]en[ií]'               # "bez nahlížení do registrů"
+    r'|spl[aá]tk[yi]\s+(?:dle|od|bez)'         # "splátky dle domluvy", "splátky od 3000"
+    r')',
+    re.IGNORECASE,
+)
+
 # Single keywords that in a heading strongly indicate parts/accessories, not a car.
 # Intentionally conservative — only words that almost never appear in real car sale headings.
 _PARTS_KEYWORDS = re.compile(
@@ -68,6 +109,13 @@ _PARTS_KEYWORDS = re.compile(
     r'|tlumi[čc][e]?|pru[zž]in[ya]'
     r'|p[ií]st[y]?|v[aá]lce|turbodmychadlo'
     r'|v[yý]fuk|katalyz[aá]tor|dpf|egr'
+    # Chassis, body parts, interior
+    r'|[šs]asi|korb[auye]|nosn[yý]\s+r[aá]m'
+    r'|seda[čc]k[yi]|tapec[eiy]|interi[eé]r|potah[y]?'
+    # Body kits, bumper sets
+    r'|body\s*kit'
+    # Camper conversions
+    r'|autovestavb[ay]|obytn[aá]\s+vestavb[ay]'
     # Tyres, wheels, discs
     r'|pneumatik[yi]|pneu|disk[yi]|alu\s*kol[ao]?'
     # Non-car vehicles — motorcycles
@@ -119,6 +167,24 @@ def check_if_car(description, heading, price):
 
     # Check heading for parts keywords (single words, conservative list)
     if _PARTS_KEYWORDS.search(heading):
+        return False
+
+    # Heading starts with a component name (e.g., "Motor Octavia III 1.6")
+    if _HEADING_STARTS_WITH_PART.search(heading):
+        return False
+
+    # Wheel/rim specs in heading (e.g., "7,5jx18 5x112 Škoda Luna")
+    if _WHEEL_SPEC_PATTERNS.search(heading):
+        return False
+
+    # Description-level checks (na díly, nemá papíry, etc.)
+    if description and _DESC_PARTS_PHRASES.search(description):
+        return False
+
+    # Installment sales — listed price is just a down payment, skews statistics
+    if description and _INSTALLMENT_PATTERNS.search(description):
+        return False
+    if _INSTALLMENT_PATTERNS.search(heading):
         return False
 
     return True
@@ -277,13 +343,15 @@ async def fetch_data_into_database(data: List[Dict], batch_size: int = 100):
                                 validated_year,
                                 item['mileage'],
                                 item['power'],
-                                item.get('fuel'),       # NEW: fuel type
+                                item.get('fuel'),
                                 item['price'],
                                 item['url'],
                                 years_in_usage,
                                 price_per_km,
                                 mileage_per_year,
-                                unique_id
+                                unique_id,
+                                item.get('listing_date'),
+                                item.get('view_count'),
                             ))
 
                     if values:
@@ -291,9 +359,9 @@ async def fetch_data_into_database(data: List[Dict], batch_size: int = 100):
                         INSERT INTO offers (
                             model_id, year_manufacture, mileage, power, fuel,
                             price, url, years_in_usage, price_per_km, mileage_per_year,
-                            unique_id, scraped_at
+                            unique_id, scraped_at, listing_date, view_count
                         )
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s)
                         ON DUPLICATE KEY UPDATE
                             year_manufacture = VALUES(year_manufacture),
                             mileage = VALUES(mileage),
@@ -303,7 +371,9 @@ async def fetch_data_into_database(data: List[Dict], batch_size: int = 100):
                             years_in_usage = VALUES(years_in_usage),
                             price_per_km = VALUES(price_per_km),
                             mileage_per_year = VALUES(mileage_per_year),
-                            scraped_at = NOW()
+                            scraped_at = NOW(),
+                            listing_date = VALUES(listing_date),
+                            view_count = VALUES(view_count)
                         """
                         await cur.executemany(sql, values)
                         inserted_count += len(values)

@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>Data Browser – Bazos Analysis</title>
+    <link href="/static/css/styles.css" rel="stylesheet" />
+    <style>
+        .stat-card {
+            border: 1px solid #dee2e6; border-radius: 8px;
+            padding: 1rem 1.25rem; background: #fff; margin-bottom: 1rem;
+        }
+        .stat-card .value { font-size: 1.6rem; font-weight: 700; color: #0d6efd; }
+        .stat-card .label { font-size: 0.8rem; color: #6c757d; text-transform: uppercase; letter-spacing: .05em; }
+        .filter-bar { background: #f8f9fa; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+        .browser-table td, .browser-table th { font-size: 0.85rem; vertical-align: middle; }
+        .cell-null { background: #fff3cd; color: #856404; font-style: italic; font-size: 0.8rem; }
+        .loading { color: #6c757d; font-style: italic; font-size: 0.85rem; }
+        .tab-content { padding-top: 1rem; }
+        .btn-action { font-size: 0.78rem; padding: 2px 8px; }
+        .toast-container { position: fixed; top: 1rem; right: 1rem; z-index: 9999; }
+        .quality-bar { height: 22px; border-radius: 4px; background: #e9ecef; overflow: hidden; }
+        .quality-bar-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+        .modal-body .form-label { font-size: 0.85rem; font-weight: 600; }
+        #edit-url { font-size: 0.8rem; word-break: break-all; }
+    </style>
+</head>
+<body>
+<div class="d-flex" id="wrapper">
+    <!-- Sidebar -->
+    <div class="border-end bg-white" id="sidebar-wrapper">
+        <div class="sidebar-heading border-bottom bg-light">MENU</div>
+        <div class="list-group list-group-flush">
+            <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/">Home</a>
+            <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/dashboard">Dashboard</a>
+            <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/car-compare">Car compare</a>
+            <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/deals">Výhodné nabídky</a>
+            <a class="list-group-item list-group-item-action list-group-item-light p-3 active" href="/admin/browser">Data Browser</a>
+            <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/admin/suspicious">Podezřelé nabídky</a>
+        </div>
+    </div>
+
+    <!-- Page content -->
+    <div id="page-content-wrapper">
+        <nav class="navbar navbar-expand-lg navbar-light bg-light border-bottom">
+            <div class="container-fluid">
+                <button class="btn btn-sm btn-outline-secondary me-2" id="sidebarToggle">&#9776;</button>
+                <span class="navbar-brand mb-0 h6">Bazos Analysis — Data Browser</span>
+            </div>
+        </nav>
+
+        <div class="container-fluid p-4">
+            <!-- Tabs -->
+            <ul class="nav nav-tabs" role="tablist">
+                <li class="nav-item">
+                    <button class="nav-link active" data-tab="browser" onclick="switchTab('browser')">Prohlížeč nabídek</button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link" data-tab="quality" onclick="switchTab('quality')">Kvalita dat</button>
+                </li>
+            </ul>
+
+            <!-- TAB: Browser -->
+            <div class="tab-content" id="tab-browser">
+                <!-- Filters -->
+                <div class="filter-bar">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-2">
+                            <label class="form-label small fw-semibold text-muted">Značka</label>
+                            <select id="f-brand" class="form-select form-select-sm">
+                                <option value="">— všechny —</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-semibold text-muted">Model</label>
+                            <select id="f-model" class="form-select form-select-sm" disabled>
+                                <option value="">— všechny —</option>
+                            </select>
+                        </div>
+                        <div class="col-md-1">
+                            <label class="form-label small fw-semibold text-muted">Palivo</label>
+                            <select id="f-fuel" class="form-select form-select-sm">
+                                <option value="">vše</option>
+                                <option value="diesel">diesel</option>
+                                <option value="benzin">benzin</option>
+                                <option value="lpg">lpg</option>
+                                <option value="elektro">elektro</option>
+                                <option value="hybrid">hybrid</option>
+                                <option value="cng">cng</option>
+                                <option value="null">NULL</option>
+                            </select>
+                        </div>
+                        <div class="col-md-1">
+                            <label class="form-label small fw-semibold text-muted">Rok od</label>
+                            <input id="f-year-from" type="number" class="form-control form-control-sm" placeholder="1990">
+                        </div>
+                        <div class="col-md-1">
+                            <label class="form-label small fw-semibold text-muted">Rok do</label>
+                            <input id="f-year-to" type="number" class="form-control form-control-sm" placeholder="2026">
+                        </div>
+                        <div class="col-md-1">
+                            <label class="form-label small fw-semibold text-muted">Km od</label>
+                            <input id="f-mileage-from" type="number" class="form-control form-control-sm" placeholder="0">
+                        </div>
+                        <div class="col-md-1">
+                            <label class="form-label small fw-semibold text-muted">Km do</label>
+                            <input id="f-mileage-to" type="number" class="form-control form-control-sm" placeholder="max">
+                        </div>
+                        <div class="col-md-1">
+                            <label class="form-label small fw-semibold text-muted">&nbsp;</label>
+                            <button class="btn btn-primary btn-sm w-100" onclick="currentPage=1; loadOffers()">Hledat</button>
+                        </div>
+                    </div>
+                    <div class="row g-2 mt-1 align-items-center">
+                        <div class="col-auto">
+                            <label class="form-label small fw-semibold text-muted mb-0">Chybějící pole:</label>
+                        </div>
+                        <div class="col-auto">
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" id="miss-year" value="year_manufacture">
+                                <label class="form-check-label small" for="miss-year">Rok</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" id="miss-mileage" value="mileage">
+                                <label class="form-check-label small" for="miss-mileage">Nájezd</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" id="miss-fuel" value="fuel">
+                                <label class="form-check-label small" for="miss-fuel">Palivo</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" id="miss-power" value="power">
+                                <label class="form-check-label small" for="miss-power">Výkon</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" id="miss-price" value="price">
+                                <label class="form-check-label small" for="miss-price">Cena</label>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <button class="btn btn-outline-warning btn-sm" onclick="setAllMissing()">Jen chybějící data</button>
+                        </div>
+                        <div class="col-auto">
+                            <button class="btn btn-outline-secondary btn-sm" onclick="clearFilters()">Reset filtrů</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Results table -->
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm browser-table">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="sortable" data-sort="id" onclick="setSort('id')">ID</th>
+                                <th>Značka</th>
+                                <th>Model</th>
+                                <th class="sortable" data-sort="year_manufacture" onclick="setSort('year_manufacture')">Rok</th>
+                                <th class="text-end sortable" data-sort="mileage" onclick="setSort('mileage')">Nájezd</th>
+                                <th class="text-end">Výkon</th>
+                                <th>Palivo</th>
+                                <th class="text-end sortable" data-sort="price" onclick="setSort('price')">Cena</th>
+                                <th>Kč/km</th>
+                                <th>Scraped</th>
+                                <th>URL</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="offers-body">
+                            <tr><td colspan="12" class="loading text-center">Načítám…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination -->
+                <div class="d-flex justify-content-between align-items-center mt-1">
+                    <span class="text-muted small" id="pagination-info"></span>
+                    <div>
+                        <button class="btn btn-sm btn-outline-secondary" id="btn-prev" disabled onclick="changePage(-1)">Předchozí</button>
+                        <button class="btn btn-sm btn-outline-secondary" id="btn-next" disabled onclick="changePage(1)">Další</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB: Quality -->
+            <div class="tab-content" id="tab-quality" style="display:none;">
+                <!-- Quality KPIs -->
+                <div class="row g-3 mb-3" id="quality-kpis"></div>
+
+                <!-- Completeness bars -->
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h6 class="card-title text-uppercase small fw-semibold text-muted">Kompletnost polí</h6>
+                        <div id="quality-bars"></div>
+                    </div>
+                </div>
+
+                <!-- Action buttons -->
+                <div class="card">
+                    <div class="card-body">
+                        <h6 class="card-title text-uppercase small fw-semibold text-muted">Akce</h6>
+                        <div class="d-flex flex-wrap gap-2">
+                            <button class="btn btn-outline-primary btn-sm" onclick="runAction('normalize-fuel')">
+                                Normalizovat palivo
+                            </button>
+                            <button class="btn btn-outline-primary btn-sm" onclick="runAction('fix-misplaced')">
+                                Opravit prohozené hodnoty
+                            </button>
+                            <button class="btn btn-outline-warning btn-sm" onclick="showMissing('year_manufacture,mileage,fuel,power')">
+                                Zobrazit chybějící data
+                            </button>
+                            <button class="btn btn-outline-warning btn-sm" onclick="showOutliers('mileage')">
+                                Outlier nájezdy (&gt;1M)
+                            </button>
+                            <button class="btn btn-outline-warning btn-sm" onclick="showOutliers('price')">
+                                Outlier ceny (&gt;50M)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal fade" id="editModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title">Upravit nabídku <span id="edit-id" class="text-muted"></span></h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p id="edit-url"></p>
+                <div class="row g-3">
+                    <div class="col-6">
+                        <label class="form-label">Rok výroby</label>
+                        <input type="number" class="form-control form-control-sm" id="edit-year" min="1900" max="2030">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Nájezd (km)</label>
+                        <input type="number" class="form-control form-control-sm" id="edit-mileage" min="0" max="1000000">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Výkon (kW)</label>
+                        <input type="number" class="form-control form-control-sm" id="edit-power" min="0" max="2000">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Palivo</label>
+                        <select class="form-select form-select-sm" id="edit-fuel">
+                            <option value="">— neuvedeno —</option>
+                            <option value="diesel">diesel</option>
+                            <option value="benzin">benzin</option>
+                            <option value="lpg">lpg</option>
+                            <option value="elektro">elektro</option>
+                            <option value="hybrid">hybrid</option>
+                            <option value="cng">cng</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer justify-content-between">
+                <button class="btn btn-outline-danger btn-sm" onclick="deleteOffer()">Smazat</button>
+                <div>
+                    <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Zrušit</button>
+                    <button class="btn btn-primary btn-sm" onclick="saveOffer()">Uložit</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div class="toast-container">
+    <div class="toast align-items-center border-0" id="toast" role="alert">
+        <div class="d-flex">
+            <div class="toast-body" id="toast-body"></div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    </div>
+</div>
+
+<!-- Bootstrap JS (for modal + toast) -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// ================================================================
+// State
+// ================================================================
+let currentPage = 1;
+const perPage = 50;
+let currentSort = 'id';
+let currentSortDir = 'desc';
+let editingId = null;
+
+const CSRF = document.querySelector('meta[name="csrf-token"]').content;
+
+// ================================================================
+// Helpers
+// ================================================================
+const fmt = {
+    num: v => v != null ? v.toLocaleString('cs-CZ') : null,
+    price: v => v != null ? Math.round(v).toLocaleString('cs-CZ') + ' Kč' : null,
+    km: v => v != null ? Math.round(v).toLocaleString('cs-CZ') + ' km' : null,
+    pct: v => v != null ? v.toFixed(1) + ' %' : '–',
+    ppkm: v => v != null ? v.toFixed(1) : null,
+    date: v => v ? new Date(v).toLocaleDateString('cs-CZ') : null,
+};
+
+function cell(value, formatter) {
+    const formatted = formatter ? formatter(value) : value;
+    if (formatted == null) return '<td class="cell-null">NULL</td>';
+    return `<td>${formatted}</td>`;
+}
+
+function cellEnd(value, formatter) {
+    const formatted = formatter ? formatter(value) : value;
+    if (formatted == null) return '<td class="text-end cell-null">NULL</td>';
+    return `<td class="text-end">${formatted}</td>`;
+}
+
+async function apiFetch(url) {
+    try {
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        return await resp.json();
+    } catch (e) {
+        console.error('API error:', url, e);
+        return null;
+    }
+}
+
+async function apiPost(url, method = 'POST', body = null) {
+    try {
+        const opts = {
+            method,
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+        };
+        if (body) opts.body = JSON.stringify(body);
+        const resp = await fetch(url, opts);
+        return { ok: resp.ok, data: await resp.json() };
+    } catch (e) {
+        console.error('API error:', url, e);
+        return { ok: false, data: { error: e.message } };
+    }
+}
+
+function showToast(message, type = 'success') {
+    const toast = document.getElementById('toast');
+    toast.className = `toast align-items-center border-0 text-bg-${type}`;
+    document.getElementById('toast-body').textContent = message;
+    new bootstrap.Toast(toast, { delay: 3000 }).show();
+}
+
+// ================================================================
+// Tab switching
+// ================================================================
+function switchTab(tab) {
+    document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
+    document.getElementById('tab-' + tab).style.display = 'block';
+    document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+    if (tab === 'quality') loadQuality();
+}
+
+// ================================================================
+// Brand/model dropdowns
+// ================================================================
+async function loadBrands() {
+    const brands = await apiFetch('/api/brands');
+    if (!brands) return;
+    const sel = document.getElementById('f-brand');
+    brands.forEach(b => {
+        const opt = document.createElement('option');
+        opt.value = b;
+        opt.textContent = b;
+        sel.appendChild(opt);
+    });
+}
+
+async function loadModels() {
+    const brand = document.getElementById('f-brand').value;
+    const sel = document.getElementById('f-model');
+    sel.innerHTML = '<option value="">— všechny —</option>';
+    if (!brand) { sel.disabled = true; return; }
+
+    const models = await apiFetch(`/api/models/${brand}`);
+    if (!models) return;
+    models.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m;
+        opt.textContent = m;
+        sel.appendChild(opt);
+    });
+    sel.disabled = false;
+}
+
+// ================================================================
+// Offer browser
+// ================================================================
+async function loadOffers() {
+    let url = `/api/admin/offers?page=${currentPage}&per_page=${perPage}&sort=${currentSort}&sort_dir=${currentSortDir}`;
+
+    const brand = document.getElementById('f-brand').value;
+    const model = document.getElementById('f-model').value;
+    const fuel = document.getElementById('f-fuel').value;
+    if (brand) url += `&brand=${encodeURIComponent(brand)}`;
+    if (model) url += `&model=${encodeURIComponent(model)}`;
+    if (fuel) url += `&fuel=${encodeURIComponent(fuel)}`;
+
+    const yearFrom = document.getElementById('f-year-from').value;
+    const yearTo = document.getElementById('f-year-to').value;
+    if (yearFrom) url += `&year_from=${yearFrom}`;
+    if (yearTo) url += `&year_to=${yearTo}`;
+
+    const milFrom = document.getElementById('f-mileage-from').value;
+    const milTo = document.getElementById('f-mileage-to').value;
+    if (milFrom) url += `&mileage_from=${milFrom}`;
+    if (milTo) url += `&mileage_to=${milTo}`;
+
+    // Missing fields
+    const missing = [];
+    document.querySelectorAll('.form-check-input:checked').forEach(cb => missing.push(cb.value));
+    if (missing.length) url += `&missing=${missing.join(',')}`;
+
+    const data = await apiFetch(url);
+    if (!data) {
+        document.getElementById('offers-body').innerHTML =
+            '<tr><td colspan="12" class="text-center text-danger">Chyba při načítání</td></tr>';
+        return;
+    }
+
+    const tbody = document.getElementById('offers-body');
+    if (data.offers.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="12" class="text-center text-muted">Žádné nabídky</td></tr>';
+    } else {
+        tbody.innerHTML = data.offers.map(o => `
+            <tr>
+                <td class="text-muted small">${o.id}</td>
+                ${cell(o.brand)}
+                ${cell(o.model)}
+                ${cell(o.year_manufacture)}
+                ${cellEnd(o.mileage, fmt.km)}
+                ${cellEnd(o.power)}
+                ${cell(o.fuel)}
+                ${cellEnd(o.price, fmt.price)}
+                ${cell(o.price_per_km, fmt.ppkm)}
+                ${cell(o.scraped_at, fmt.date)}
+                <td>${o.url ? `<a href="${o.url}" target="_blank" class="small" style="max-width:150px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">↗ bazos</a>` : '<span class="cell-null">NULL</span>'}</td>
+                <td>
+                    <button class="btn btn-outline-secondary btn-action" onclick="openEdit(${o.id})">✏️</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    // Pagination
+    const p = data.pagination;
+    document.getElementById('pagination-info').textContent =
+        `Stránka ${p.page} z ${p.pages} (${fmt.num(p.total)} nabídek)`;
+    document.getElementById('btn-prev').disabled = p.page <= 1;
+    document.getElementById('btn-next').disabled = p.page >= p.pages;
+}
+
+function changePage(delta) {
+    currentPage += delta;
+    loadOffers();
+}
+
+function setSort(field) {
+    if (currentSort === field) {
+        currentSortDir = currentSortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+        currentSort = field;
+        currentSortDir = 'desc';
+    }
+    currentPage = 1;
+    loadOffers();
+}
+
+function setAllMissing() {
+    document.querySelectorAll('.form-check-input').forEach(cb => cb.checked = true);
+    currentPage = 1;
+    loadOffers();
+}
+
+function clearFilters() {
+    document.getElementById('f-brand').value = '';
+    document.getElementById('f-model').innerHTML = '<option value="">— všechny —</option>';
+    document.getElementById('f-model').disabled = true;
+    document.getElementById('f-fuel').value = '';
+    document.getElementById('f-year-from').value = '';
+    document.getElementById('f-year-to').value = '';
+    document.getElementById('f-mileage-from').value = '';
+    document.getElementById('f-mileage-to').value = '';
+    document.querySelectorAll('.form-check-input').forEach(cb => cb.checked = false);
+    currentPage = 1;
+    loadOffers();
+}
+
+// ================================================================
+// Edit modal
+// ================================================================
+async function openEdit(id) {
+    editingId = id;
+    const data = await apiFetch(`/api/cars/${id}`);
+    if (!data) { showToast('Nabídka nenalezena', 'danger'); return; }
+
+    document.getElementById('edit-id').textContent = `#${id}`;
+    document.getElementById('edit-url').innerHTML = data.url
+        ? `<a href="${data.url}" target="_blank">${data.url}</a>`
+        : 'Bez odkazu';
+    document.getElementById('edit-year').value = data.year_manufacture ?? '';
+    document.getElementById('edit-mileage').value = data.mileage ?? '';
+    document.getElementById('edit-power').value = data.power ?? '';
+    document.getElementById('edit-fuel').value = data.fuel ?? '';
+
+    new bootstrap.Modal(document.getElementById('editModal')).show();
+}
+
+async function saveOffer() {
+    const updates = {};
+    const year = document.getElementById('edit-year').value;
+    const mileage = document.getElementById('edit-mileage').value;
+    const power = document.getElementById('edit-power').value;
+    const fuel = document.getElementById('edit-fuel').value;
+
+    updates.year_manufacture = year ? parseInt(year) : null;
+    updates.mileage = mileage ? parseInt(mileage) : null;
+    updates.power = power ? parseInt(power) : null;
+    updates.fuel = fuel || null;
+
+    const res = await apiPost(`/api/admin/offers/${editingId}`, 'PATCH', updates);
+    if (res.ok) {
+        showToast('Uloženo');
+        bootstrap.Modal.getInstance(document.getElementById('editModal')).hide();
+        loadOffers();
+    } else {
+        showToast(res.data.error || 'Chyba při ukládání', 'danger');
+    }
+}
+
+async function deleteOffer() {
+    if (!confirm(`Opravdu smazat nabídku #${editingId}?`)) return;
+
+    const res = await apiPost(`/api/admin/offers/${editingId}`, 'DELETE');
+    if (res.ok) {
+        showToast('Smazáno');
+        bootstrap.Modal.getInstance(document.getElementById('editModal')).hide();
+        loadOffers();
+    } else {
+        showToast(res.data.error || 'Chyba při mazání', 'danger');
+    }
+}
+
+// ================================================================
+// Quality tab
+// ================================================================
+async function loadQuality() {
+    const data = await apiFetch('/api/admin/quality/summary');
+    if (!data) return;
+
+    // KPIs
+    const kpis = document.getElementById('quality-kpis');
+    kpis.innerHTML = `
+        <div class="col-6 col-md-2">
+            <div class="stat-card">
+                <div class="value">${fmt.num(data.total)}</div>
+                <div class="label">Celkem nabídek</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-2">
+            <div class="stat-card">
+                <div class="value">${data.anomalies.misplaced_fuel}</div>
+                <div class="label">Prohozené hodnoty</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-2">
+            <div class="stat-card">
+                <div class="value">${data.anomalies.mileage_outliers}</div>
+                <div class="label">Outlier nájezdy</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-2">
+            <div class="stat-card">
+                <div class="value">${data.anomalies.price_outliers}</div>
+                <div class="label">Outlier ceny</div>
+            </div>
+        </div>
+    `;
+
+    // Completeness bars
+    const bars = document.getElementById('quality-bars');
+    const fieldLabels = {
+        year_manufacture: 'Rok výroby',
+        mileage: 'Nájezd',
+        power: 'Výkon',
+        fuel: 'Palivo',
+        price: 'Cena',
+    };
+
+    bars.innerHTML = Object.entries(data.fields).map(([field, info]) => {
+        const color = info.pct > 80 ? '#198754' : info.pct > 50 ? '#ffc107' : '#dc3545';
+        return `
+            <div class="d-flex align-items-center mb-2">
+                <span class="small fw-semibold" style="width:100px;">${fieldLabels[field] || field}</span>
+                <div class="quality-bar flex-grow-1 me-2">
+                    <div class="quality-bar-fill" style="width:${info.pct}%; background:${color};"></div>
+                </div>
+                <span class="small text-muted" style="width:120px;">${info.pct}% (${fmt.num(info.missing)} chybí)</span>
+            </div>
+        `;
+    }).join('');
+}
+
+async function runAction(action) {
+    if (!confirm(`Spustit akci "${action}"?`)) return;
+    const res = await apiPost(`/api/admin/quality/${action}`, 'POST');
+    if (res.ok) {
+        showToast(`Hotovo: ${res.data.affected} záznamů upraveno`);
+        loadQuality();
+    } else {
+        showToast(res.data.error || 'Chyba', 'danger');
+    }
+}
+
+function showMissing(fields) {
+    // Clear all checkboxes first, then set the ones we want
+    document.querySelectorAll('.form-check-input').forEach(cb => {
+        cb.checked = fields.split(',').includes(cb.value);
+    });
+    switchTab('browser');
+    currentPage = 1;
+    loadOffers();
+}
+
+function showOutliers(field) {
+    clearFilters();
+    if (field === 'mileage') {
+        document.getElementById('f-mileage-from').value = '1000001';
+    } else if (field === 'price') {
+        document.getElementById('f-year-from').value = '';
+        // Use a high price threshold
+        // We'll just switch to browser and set the range
+        const el = document.createElement('input');
+        el.type = 'hidden';
+    }
+    switchTab('browser');
+    currentPage = 1;
+    loadOffers();
+}
+
+// ================================================================
+// Init
+// ================================================================
+document.getElementById('sidebarToggle').addEventListener('click', () => {
+    document.getElementById('wrapper').classList.toggle('toggled');
+});
+
+document.getElementById('f-brand').addEventListener('change', () => {
+    loadModels();
+    currentPage = 1;
+});
+
+loadBrands();
+loadOffers();
+</script>
+</body>
+</html>

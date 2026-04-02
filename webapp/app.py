@@ -16,9 +16,18 @@ from sqlalchemy import create_engine, func, text
 from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy.exc import NoResultFound, SQLAlchemyError
 
-from database.model import Base, Car, init_database
+from database.model import Base, Car, Offer, init_database
 from webapp.config import get_config
-from webapp.deal_detection import find_deals, score_single_offer
+from webapp.deal_detection import find_deals, score_single_offer, find_suspicious
+from database.admin_operations import (
+    update_offer_fields, delete_offer, get_data_quality_summary,
+    bulk_normalize_fuel, bulk_fix_misplaced, EDITABLE_FIELDS,
+)
+
+# Sanity bounds for filtering outliers in statistics
+MAX_REASONABLE_MILEAGE = 1_000_000  # km
+MAX_REASONABLE_PRICE = 50_000_000   # CZK
+MAX_PRICE_PER_KM = 500.0           # CZK/km — above this is likely bad data
 
 # Configure logging
 logging.basicConfig(
@@ -63,7 +72,7 @@ DBSession = scoped_session(sessionmaker(bind=engine))
 
 @contextmanager
 def get_db_session():
-    """Context manager for database sessions with automatic cleanup"""
+    """Context manager for database sessions with automatic cleanup."""
     session = DBSession()
     try:
         yield session
@@ -73,7 +82,7 @@ def get_db_session():
         logger.error(f"Database error: {e}")
         raise
     finally:
-        session.close()
+        DBSession.remove()
 
 
 @app.route("/")
@@ -160,8 +169,12 @@ def stats_overview():
             total_brands = session.query(Car.brand).distinct().count()
             total_models = session.query(Car.brand, Car.model).distinct().count()
 
-            avg_price = session.query(func.avg(Car.price)).scalar()
-            avg_mileage = session.query(func.avg(Car.mileage)).scalar()
+            avg_price = session.query(func.avg(Car.price)).filter(
+                Car.price > 0, Car.price < MAX_REASONABLE_PRICE
+            ).scalar()
+            avg_mileage = session.query(func.avg(Car.mileage)).filter(
+                Car.mileage > 0, Car.mileage < MAX_REASONABLE_MILEAGE
+            ).scalar()
             avg_year = session.query(func.avg(Car.year_manufacture)).scalar()
 
             # Cars with complete core data
@@ -203,13 +216,34 @@ def stats_brands():
         limit = min(request.args.get("limit", 24, type=int), 50)
 
         with get_db_session() as session:
+            # Use conditional averages to exclude outliers
+            avg_price_expr = func.avg(
+                func.IF(
+                    (Car.price > 0) & (Car.price < MAX_REASONABLE_PRICE),
+                    Car.price, None
+                )
+            )
+            avg_mileage_expr = func.avg(
+                func.IF(
+                    (Car.mileage > 0) & (Car.mileage < MAX_REASONABLE_MILEAGE),
+                    Car.mileage, None
+                )
+            )
+            avg_price_per_km_expr = func.avg(
+                func.IF(
+                    (Car.price_per_km > 0) & (Car.price_per_km < MAX_PRICE_PER_KM),
+                    Car.price_per_km, None
+                )
+            )
+
             rows = (
                 session.query(
                     Car.brand,
                     func.count(Car.id).label("count"),
-                    func.avg(Car.price).label("avg_price"),
-                    func.avg(Car.mileage).label("avg_mileage"),
+                    avg_price_expr.label("avg_price"),
+                    avg_mileage_expr.label("avg_mileage"),
                     func.avg(Car.year_manufacture).label("avg_year"),
+                    avg_price_per_km_expr.label("avg_price_per_km"),
                 )
                 .filter(Car.brand.isnot(None))
                 .group_by(Car.brand)
@@ -225,6 +259,7 @@ def stats_brands():
                     "avg_price": round(float(r.avg_price)) if r.avg_price else None,
                     "avg_mileage": round(float(r.avg_mileage)) if r.avg_mileage else None,
                     "avg_year": round(float(r.avg_year), 1) if r.avg_year else None,
+                    "avg_price_per_km": round(float(r.avg_price_per_km), 2) if r.avg_price_per_km else None,
                 }
                 for r in rows
             ])
@@ -252,13 +287,33 @@ def stats_models():
         limit = min(request.args.get("limit", 20, type=int), 100)
 
         with get_db_session() as session:
+            avg_price_expr = func.avg(
+                func.IF(
+                    (Car.price > 0) & (Car.price < MAX_REASONABLE_PRICE),
+                    Car.price, None
+                )
+            )
+            avg_mileage_expr = func.avg(
+                func.IF(
+                    (Car.mileage > 0) & (Car.mileage < MAX_REASONABLE_MILEAGE),
+                    Car.mileage, None
+                )
+            )
+            avg_price_per_km_expr = func.avg(
+                func.IF(
+                    (Car.price_per_km > 0) & (Car.price_per_km < MAX_PRICE_PER_KM),
+                    Car.price_per_km, None
+                )
+            )
+
             rows = (
                 session.query(
                     Car.model,
                     func.count(Car.id).label("count"),
-                    func.avg(Car.price).label("avg_price"),
-                    func.avg(Car.mileage).label("avg_mileage"),
+                    avg_price_expr.label("avg_price"),
+                    avg_mileage_expr.label("avg_mileage"),
                     func.avg(Car.year_manufacture).label("avg_year"),
+                    avg_price_per_km_expr.label("avg_price_per_km"),
                 )
                 .filter(Car.brand == brand, Car.model.isnot(None))
                 .group_by(Car.model)
@@ -276,6 +331,7 @@ def stats_models():
                         "avg_price": round(float(r.avg_price)) if r.avg_price else None,
                         "avg_mileage": round(float(r.avg_mileage)) if r.avg_mileage else None,
                         "avg_year": round(float(r.avg_year), 1) if r.avg_year else None,
+                        "avg_price_per_km": round(float(r.avg_price_per_km), 2) if r.avg_price_per_km else None,
                     }
                     for r in rows
                 ]
@@ -421,7 +477,285 @@ def stats_price_distribution():
     except SQLAlchemyError as e:
         logger.error(f"DB error in stats_price_distribution: {e}")
         return jsonify({"error": "Database error"}), 500
-   
+
+
+@app.route("/api/stats/scatter")
+@limiter.limit("30 per minute")
+def stats_scatter():
+    """
+    Scatter plot data: individual (mileage, price) points for a brand/model.
+
+    Query params:
+        brand (str): required
+        model (str): optional — if omitted, returns all models for brand
+        limit (int): max points (default 500, max 2000)
+    """
+    brand = request.args.get("brand")
+    if not brand:
+        return jsonify({"error": "brand parameter is required"}), 400
+
+    try:
+        model = request.args.get("model")
+        limit = min(request.args.get("limit", 500, type=int), 2000)
+
+        with get_db_session() as session:
+            query = session.query(
+                Car.model, Car.price, Car.mileage, Car.year_manufacture
+            ).filter(
+                Car.brand == brand,
+                Car.price.isnot(None),
+                Car.price > 0,
+                Car.price < MAX_REASONABLE_PRICE,
+                Car.mileage.isnot(None),
+                Car.mileage > 0,
+                Car.mileage < MAX_REASONABLE_MILEAGE,
+            )
+
+            if model:
+                query = query.filter(Car.model == model)
+
+            rows = query.order_by(func.rand()).limit(limit).all()
+
+            return jsonify({
+                "brand": brand,
+                "model": model,
+                "count": len(rows),
+                "data": [
+                    {
+                        "model": r.model,
+                        "price": r.price,
+                        "mileage": r.mileage,
+                        "year": r.year_manufacture,
+                    }
+                    for r in rows
+                ],
+            })
+
+    except SQLAlchemyError as e:
+        logger.error(f"DB error in stats_scatter: {e}")
+        return jsonify({"error": "Database error"}), 500
+
+
+# =============================================================================
+# ADMIN BROWSER — data browsing, editing, and quality tools
+# =============================================================================
+
+@app.route("/admin/browser")
+def admin_browser():
+    """Data browser and admin tool."""
+    return render_template("admin-browser.html")
+
+
+@app.route("/admin/suspicious")
+def suspicious_page():
+    """Suspicious offers browser — likely data errors."""
+    return render_template("suspicious.html")
+
+
+@app.route("/api/admin/suspicious")
+@limiter.limit("30 per minute")
+def api_admin_suspicious():
+    """
+    Find offers that look like deals but are likely data errors.
+
+    Query params:
+        brand (str): optional filter
+        model (str): optional filter
+        min_score (float): minimum deal score (default 25)
+        page (int): page number (default 1)
+        per_page (int): results per page (default 50, max 100)
+        hide_reviewed (int): 1 (default) to hide checked/dismissed offers, 0 to show all
+    """
+    try:
+        brand = request.args.get("brand")
+        model = request.args.get("model")
+        min_score = request.args.get("min_score", 25, type=float)
+        page = max(request.args.get("page", 1, type=int), 1)
+        per_page = min(max(request.args.get("per_page", 50, type=int), 1), 100)
+        hide_reviewed = request.args.get("hide_reviewed", 1, type=int) == 1
+
+        with get_db_session() as session:
+            result = find_suspicious(
+                session,
+                brand=brand,
+                model=model,
+                min_score=min_score,
+                limit=per_page,
+                offset=(page - 1) * per_page,
+                hide_reviewed=hide_reviewed,
+            )
+            return jsonify(result)
+
+    except SQLAlchemyError as e:
+        logger.error(f"DB error in api_admin_suspicious: {e}")
+        return jsonify({"error": "Database error"}), 500
+
+
+@app.route("/api/admin/offers")
+@limiter.limit("60 per minute")
+def api_admin_offers():
+    """
+    Paginated offer browser with filters.
+
+    Query params:
+        brand, model, fuel (str): exact match filters ('null' = filter for NULL)
+        year_from, year_to (int): year range
+        mileage_from, mileage_to (int): mileage range
+        price_from, price_to (int): price range
+        missing (str): comma-separated field names to filter for NULL
+        sort (str): field to sort by (default 'id')
+        sort_dir (str): 'asc' or 'desc' (default 'desc')
+        page, per_page (int): pagination
+    """
+    try:
+        page = max(request.args.get("page", 1, type=int), 1)
+        per_page = min(max(request.args.get("per_page", 50, type=int), 1), 200)
+
+        with get_db_session() as session:
+            query = session.query(Car)
+
+            # String filters (support 'null' for NULL filtering)
+            for param in ("brand", "model", "fuel"):
+                val = request.args.get(param)
+                if val == "null":
+                    query = query.filter(getattr(Car, param).is_(None))
+                elif val:
+                    query = query.filter(getattr(Car, param) == val)
+
+            # Range filters
+            range_filters = {
+                "year": "year_manufacture",
+                "mileage": "mileage",
+                "price": "price",
+            }
+            for prefix, col_name in range_filters.items():
+                col = getattr(Car, col_name)
+                val_from = request.args.get(f"{prefix}_from", type=int)
+                val_to = request.args.get(f"{prefix}_to", type=int)
+                if val_from is not None:
+                    query = query.filter(col >= val_from)
+                if val_to is not None:
+                    query = query.filter(col <= val_to)
+
+            # Missing fields filter
+            missing = request.args.get("missing", "")
+            if missing:
+                for field_name in missing.split(","):
+                    field_name = field_name.strip()
+                    if hasattr(Car, field_name):
+                        query = query.filter(getattr(Car, field_name).is_(None))
+
+            # Sorting
+            sort_field = request.args.get("sort", "id")
+            sort_dir = request.args.get("sort_dir", "desc")
+            if hasattr(Car, sort_field):
+                col = getattr(Car, sort_field)
+                query = query.order_by(col.asc() if sort_dir == "asc" else col.desc())
+            else:
+                query = query.order_by(Car.id.desc())
+
+            total = query.count()
+            rows = query.offset((page - 1) * per_page).limit(per_page).all()
+
+            return jsonify({
+                "offers": [r.serialize() for r in rows],
+                "pagination": {
+                    "page": page,
+                    "per_page": per_page,
+                    "total": total,
+                    "pages": (total + per_page - 1) // per_page if per_page else 1,
+                },
+            })
+
+    except SQLAlchemyError as e:
+        logger.error(f"DB error in api_admin_offers: {e}")
+        return jsonify({"error": "Database error"}), 500
+
+
+@app.route("/api/admin/offers/<int:offer_id>", methods=["PATCH"])
+@limiter.limit("30 per minute")
+def api_admin_update_offer(offer_id: int):
+    """
+    Update one or more fields on an offer.
+
+    JSON body: {"year_manufacture": 2015, "fuel": "diesel", ...}
+    Only whitelisted fields are accepted.
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON body provided"}), 400
+
+        # Filter to only editable fields
+        updates = {k: v for k, v in data.items() if k in EDITABLE_FIELDS}
+        if not updates:
+            return jsonify({"error": f"No valid fields. Editable: {list(EDITABLE_FIELDS.keys())}"}), 400
+
+        with get_db_session() as session:
+            result = update_offer_fields(session, offer_id, updates)
+            if result is None:
+                return jsonify({"error": "Offer not found"}), 404
+            return jsonify(result)
+
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except SQLAlchemyError as e:
+        logger.error(f"DB error in api_admin_update_offer: {e}")
+        return jsonify({"error": "Database error"}), 500
+
+
+@app.route("/api/admin/offers/<int:offer_id>", methods=["DELETE"])
+@limiter.limit("10 per minute")
+def api_admin_delete_offer(offer_id: int):
+    """Delete a single junk offer."""
+    try:
+        with get_db_session() as session:
+            if delete_offer(session, offer_id):
+                return jsonify({"ok": True})
+            return jsonify({"error": "Offer not found"}), 404
+
+    except SQLAlchemyError as e:
+        logger.error(f"DB error in api_admin_delete_offer: {e}")
+        return jsonify({"error": "Database error"}), 500
+
+
+@app.route("/api/admin/quality/summary")
+@limiter.limit("30 per minute")
+def api_admin_quality_summary():
+    """Data completeness stats and anomaly counts."""
+    try:
+        with get_db_session() as session:
+            return jsonify(get_data_quality_summary(session))
+    except SQLAlchemyError as e:
+        logger.error(f"DB error in api_admin_quality_summary: {e}")
+        return jsonify({"error": "Database error"}), 500
+
+
+@app.route("/api/admin/quality/normalize-fuel", methods=["POST"])
+@limiter.limit("5 per minute")
+def api_admin_normalize_fuel():
+    """Run bulk fuel normalization."""
+    try:
+        with get_db_session() as session:
+            result = bulk_normalize_fuel(session)
+            return jsonify(result)
+    except SQLAlchemyError as e:
+        logger.error(f"DB error in api_admin_normalize_fuel: {e}")
+        return jsonify({"error": "Database error"}), 500
+
+
+@app.route("/api/admin/quality/fix-misplaced", methods=["POST"])
+@limiter.limit("5 per minute")
+def api_admin_fix_misplaced():
+    """Run bulk misplaced value fix."""
+    try:
+        with get_db_session() as session:
+            result = bulk_fix_misplaced(session)
+            return jsonify(result)
+    except SQLAlchemyError as e:
+        logger.error(f"DB error in api_admin_fix_misplaced: {e}")
+        return jsonify({"error": "Database error"}), 500
+
 
 @app.route('/car-compare')
 def car_comparison():
@@ -457,6 +791,7 @@ def api_deals():
         model = request.args.get("model")
         fuel = request.args.get("fuel")
         min_score = request.args.get("min_score", 15, type=float)
+        confidence = request.args.get("confidence")  # high, medium, or empty for all
         page = max(request.args.get("page", 1, type=int), 1)
         per_page = min(max(request.args.get("per_page", 20, type=int), 1), 100)
 
@@ -469,6 +804,7 @@ def api_deals():
                 min_score=min_score,
                 limit=per_page,
                 offset=(page - 1) * per_page,
+                min_confidence=confidence,
             )
             return jsonify(result)
 

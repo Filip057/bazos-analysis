@@ -113,15 +113,19 @@ class DataNormalizer:
         # This catches power values (180kw), part codes (M54B25), random text, etc.
         return None
 
+    # Maximum plausible mileage for a car (sanity cap)
+    MAX_MILEAGE = 1_000_000
+
     @staticmethod
     def normalize_mileage(mileage: any) -> Optional[int]:
-        """Normalize mileage to integer km"""
+        """Normalize mileage to integer km. Returns None if above sanity cap."""
         if not mileage:
             return None
 
         # Already a number
         if isinstance(mileage, (int, float)):
-            return int(mileage)
+            value = int(mileage)
+            return value if value <= DataNormalizer.MAX_MILEAGE else None
 
         # String - parse it
         if isinstance(mileage, str):
@@ -135,11 +139,11 @@ class DataNormalizer:
             if match:
                 value = int(match.group(1))
 
-                # Check for thousands abbreviations
-                if re.search(r'\d+\s*(?:tis|t)\.?\s*km', mileage, re.IGNORECASE):
+                # Check for thousands abbreviations (tkm, tis, tis km, xxx, t.km)
+                if re.search(r'\d\s*(?:tkm|tis|xxx|t\.?\s*km)', mileage, re.IGNORECASE):
                     value = value * 1000
 
-                return value
+                return value if value <= DataNormalizer.MAX_MILEAGE else None
 
         return None
 
@@ -388,12 +392,22 @@ class ProductionExtractor:
         #   Fuel doesn't have a resolver, so we verify directly when ML=None, regex=found.
         fuel_verification = None
         if ml_result_raw.get('fuel') is None and regex_result_raw.get('fuel') is not None:
-            # Fuel regex doesn't provide confidence levels, so we assume 'medium'
+            # Engine codes (TDI, HDI, etc.) are unambiguous → high confidence
+            _UNAMBIGUOUS_ENGINE_CODES = {
+                'tdi', 'hdi', 'cdti', 'crdi', 'dci', 'jtd', 'jtdm', 'tdci', 'dti',
+                'tsi', 'tce', 'gti', 'gdi', 'mpi', 'fsi', 'tfsi',
+            }
+            fuel_candidate = regex_result_raw['fuel']
+            if fuel_candidate.lower() in _UNAMBIGUOUS_ENGINE_CODES:
+                fuel_regex_confidence = 'high'
+            else:
+                fuel_regex_confidence = 'medium'
+
             fuel_verification = self.entity_verifier.verify(
                 text=text,
                 entity_type='fuel',
-                regex_candidate=regex_result_raw['fuel'],
-                regex_confidence='medium'  # Default for fuel
+                regex_candidate=fuel_candidate,
+                regex_confidence=fuel_regex_confidence,
             )
 
             logger.debug(

@@ -1,5 +1,5 @@
 from sqlalchemy.orm import DeclarativeBase, relationship
-from sqlalchemy import Column, Integer, String, BigInteger, ForeignKey, Float, Index, DateTime
+from sqlalchemy import Column, Integer, String, BigInteger, ForeignKey, Float, Index, DateTime, Date
 from sqlalchemy import create_engine
 from webapp.config import get_config
 
@@ -53,11 +53,16 @@ class Offer(Base):
     price = Column(Integer, nullable=True)
     url = Column(String(length=255), nullable=True)
     scraped_at = Column(DateTime, nullable=True)       # When was this offer last seen
+    listing_date = Column(Date, nullable=True)          # When the listing was created on bazos.cz
+    view_count = Column(Integer, nullable=True)         # Number of views at time of scraping
 
     # Derived fields
     years_in_usage = Column(Integer, nullable=True)  # current_year - year_manufacture
     price_per_km = Column(Float, nullable=True)      # price / mileage
     mileage_per_year = Column(Float, nullable=True)  # mileage / years_in_usage
+
+    # Review status: NULL (not reviewed), 'checked', 'dismissed'
+    review_status = Column(String(length=20), nullable=True)
 
     # relationships
     model = relationship('Model', back_populates='offers')
@@ -78,9 +83,12 @@ class Car(Base):
     price = Column(Integer)
     url = Column(String(length=255))
     scraped_at = Column(DateTime)
+    listing_date = Column(Date)
+    view_count = Column(Integer)
     years_in_usage = Column(Integer)
     price_per_km = Column(Float)
     mileage_per_year = Column(Float)
+    review_status = Column(String(length=20))
 
     def serialize(self):
         """Serialize car data to JSON"""
@@ -95,9 +103,12 @@ class Car(Base):
             'price': self.price,
             'url': self.url,
             'scraped_at': self.scraped_at.isoformat() if self.scraped_at else None,
+            'listing_date': self.listing_date.isoformat() if self.listing_date else None,
+            'view_count': self.view_count,
             'years_in_usage': self.years_in_usage,
             'price_per_km': float(self.price_per_km) if self.price_per_km else None,
-            'mileage_per_year': float(self.mileage_per_year) if self.mileage_per_year else None
+            'mileage_per_year': float(self.mileage_per_year) if self.mileage_per_year else None,
+            'review_status': self.review_status,
         }
 
 # ENGINE

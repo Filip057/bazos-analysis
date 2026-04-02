@@ -67,6 +67,8 @@
             <a class="list-group-item list-group-item-action list-group-item-light p-3 active" href="/dashboard">Dashboard</a>
             <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/car-compare">Car compare</a>
             <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/deals">Výhodné nabídky</a>
+            <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/admin/browser">Data Browser</a>
+            <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/admin/suspicious">Podezřelé nabídky</a>
         </div>
     </div>
 
@@ -157,6 +159,24 @@
                 </div>
             </div>
 
+            <!-- Scatter plot: price vs mileage -->
+            <div class="row g-3 mb-2">
+                <div class="col-12">
+                    <div class="chart-box">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <h6 class="mb-0">Cena vs. nájezd <span class="text-muted fw-normal" id="scatter-filter-label">(vyberte značku)</span></h6>
+                            <select id="scatter-model-filter" class="form-select form-select-sm" style="width:200px;" disabled>
+                                <option value="">— všechny modely —</option>
+                            </select>
+                        </div>
+                        <div id="scatter-placeholder" class="text-center text-muted py-4" style="font-size:0.9rem;">
+                            Vyberte značku ve filtru výše pro zobrazení scatter plotu.
+                        </div>
+                        <canvas id="chart-scatter" height="250" style="display:none;"></canvas>
+                    </div>
+                </div>
+            </div>
+
             <!-- Brand detail table -->
             <div class="chart-box mt-2">
                 <h6>Detail podle značky</h6>
@@ -168,11 +188,12 @@
                                 <th class="text-end">Nabídek</th>
                                 <th class="text-end">Prům. cena</th>
                                 <th class="text-end">Prům. nájezd</th>
+                                <th class="text-end">Kč/km</th>
                                 <th class="text-end">Prům. rok</th>
                             </tr>
                         </thead>
                         <tbody id="brand-table-body">
-                            <tr><td colspan="5" class="loading">Načítám…</td></tr>
+                            <tr><td colspan="6" class="loading">Načítám…</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -192,6 +213,7 @@ const fmt = {
     km:    n => n != null ? n.toLocaleString('cs-CZ') + ' km' : '–',
     pct:   n => n != null ? n.toFixed(1) + ' %' : '–',
     year:  n => n != null ? n.toFixed(1) : '–',
+    ppkm:  n => n != null ? n.toFixed(1) + ' Kč/km' : '–',
 };
 
 const FUEL_COLORS = {
@@ -286,6 +308,7 @@ async function loadBrandsChart(brand = '') {
             <td class="text-end">${fmt.num(r.count)}</td>
             <td class="text-end">${fmt.price(r.avg_price)}</td>
             <td class="text-end">${fmt.km(r.avg_mileage)}</td>
+            <td class="text-end">${fmt.ppkm(r.avg_price_per_km)}</td>
             <td class="text-end">${fmt.year(r.avg_year)}</td>
         </tr>
     `).join('');
@@ -404,6 +427,125 @@ async function apiFetch(url) {
 }
 
 // ----------------------------------------------------------------
+// Chart: scatter price vs mileage
+// ----------------------------------------------------------------
+async function loadScatterModels(brand) {
+    const sel = document.getElementById('scatter-model-filter');
+    sel.innerHTML = '<option value="">— všechny modely —</option>';
+
+    if (!brand) {
+        sel.disabled = true;
+        return;
+    }
+
+    const models = await apiFetch(`/api/models/${brand}`);
+    if (!models) return;
+
+    models.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m;
+        opt.textContent = m;
+        sel.appendChild(opt);
+    });
+    sel.disabled = false;
+}
+
+async function loadScatterChart(brand = '', model = '') {
+    const canvas = document.getElementById('chart-scatter');
+    const placeholder = document.getElementById('scatter-placeholder');
+    const label = document.getElementById('scatter-filter-label');
+
+    if (!brand) {
+        destroyChart('scatter');
+        canvas.style.display = 'none';
+        placeholder.style.display = 'block';
+        placeholder.textContent = 'Vyberte značku ve filtru výše pro zobrazení scatter plotu.';
+        label.textContent = '(vyberte značku)';
+        return;
+    }
+
+    let url = `/api/stats/scatter?brand=${brand}&limit=1500`;
+    if (model) url += `&model=${model}`;
+
+    const data = await apiFetch(url);
+    if (!data || !data.data.length) {
+        canvas.style.display = 'none';
+        placeholder.style.display = 'block';
+        placeholder.textContent = 'Žádná data pro tento výběr.';
+        return;
+    }
+
+    placeholder.style.display = 'none';
+    canvas.style.display = 'block';
+    const filterDesc = model ? `${brand} ${model}` : brand;
+    label.textContent = `— ${filterDesc} (${data.count} nabídek)`;
+
+    // Group points by model for color coding
+    const modelMap = {};
+    data.data.forEach(d => {
+        if (!modelMap[d.model]) modelMap[d.model] = [];
+        modelMap[d.model].push({ x: d.mileage, y: d.price, year: d.year });
+    });
+
+    // Generate a color per model
+    const models = Object.keys(modelMap).sort((a, b) => modelMap[b].length - modelMap[a].length);
+    const topModels = models.slice(0, 10);
+    const datasets = topModels.map((m, i) => ({
+        label: m,
+        data: modelMap[m],
+        backgroundColor: `hsla(${i * 36}, 70%, 55%, 0.6)`,
+        pointRadius: 3,
+        pointHoverRadius: 6,
+    }));
+
+    // Group remaining models as "ostatní"
+    if (models.length > 10) {
+        const otherData = models.slice(10).flatMap(m => modelMap[m]);
+        datasets.push({
+            label: 'ostatní',
+            data: otherData,
+            backgroundColor: 'hsla(0, 0%, 70%, 0.4)',
+            pointRadius: 2,
+            pointHoverRadius: 5,
+        });
+    }
+
+    destroyChart('scatter');
+    const ctx = canvas.getContext('2d');
+    charts['scatter'] = new Chart(ctx, {
+        type: 'scatter',
+        data: { datasets },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { font: { size: 11 }, boxWidth: 12, padding: 8 }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: item => {
+                            const d = item.raw;
+                            return `${item.dataset.label}: ${fmt.price(d.y)}, ${fmt.km(d.x)}${d.year ? ', rok ' + d.year : ''}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    title: { display: true, text: 'Nájezd (km)' },
+                    ticks: { callback: v => (v / 1000).toFixed(0) + 'k' }
+                },
+                y: {
+                    title: { display: true, text: 'Cena (Kč)' },
+                    ticks: { callback: v => (v / 1000).toFixed(0) + 'k' }
+                }
+            }
+        }
+    });
+}
+
+// ----------------------------------------------------------------
 // Refresh all charts (used when brand filter changes)
 // ----------------------------------------------------------------
 function refreshCharts() {
@@ -411,6 +553,8 @@ function refreshCharts() {
     loadFuelChart(brand);
     loadYearChart(brand);
     loadPriceChart(brand);
+    loadScatterModels(brand);
+    loadScatterChart(brand);
     // Brand chart and table always show all brands (don't filter)
     loadBrandsChart(brand);
 }
@@ -433,6 +577,13 @@ document.getElementById('sidebarToggle').addEventListener('click', () => {
 
 // Brand filter change
 document.getElementById('brand-filter').addEventListener('change', refreshCharts);
+
+// Scatter model filter change
+document.getElementById('scatter-model-filter').addEventListener('change', () => {
+    const brand = document.getElementById('brand-filter').value;
+    const model = document.getElementById('scatter-model-filter').value;
+    loadScatterChart(brand, model);
+});
 
 init();
 </script>

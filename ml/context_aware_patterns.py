@@ -39,6 +39,7 @@ class ContextAwarePatterns:
     # HIGH confidence - explicit production year context
     YEAR_HIGH_CONFIDENCE = [
         re.compile(r'(?:rok\s+výroby|r\.?\s?v\.?|výroba|vyrobeno)\s*[:.]?\s*(\d{4})', re.IGNORECASE),
+        re.compile(r'rok\s*[:]\s*(\d{4})', re.IGNORECASE),  # "rok:2002", "rok: 2002"
         re.compile(r'(\d{4})\s*(?:rok\s+výroby|r\.?\s?v\.?)', re.IGNORECASE),
         re.compile(r'rč\.?\s*(\d{4})', re.IGNORECASE),  # "rč. 2016"
         # NEW: Registration/in-service dates (do provozu, v provozu od, uveden do provozu)
@@ -51,6 +52,8 @@ class ContextAwarePatterns:
         re.compile(r'\d{1,2}/(\d{4})\s*\([^)]*(?:německo|austria|švýcarsko|francie|itálie)[^)]*\)', re.IGNORECASE),  # "08/2016 (Německo)"
         # 2-digit years with explicit context: "r.v. 09" → 2009, "rv96" → 1996
         re.compile(r'(?:rok\s+výroby|r\.?\s?v\.?|výroba)\s*[:.]?\s*(\d{2})(?!\d)', re.IGNORECASE),  # "r.v. 09", "rv 96"
+        # 2-digit year AFTER "rok": "94 rok", "98 rok"
+        re.compile(r'(?<!\d)(\d{2})\s+rok\b', re.IGNORECASE),  # "94 rok"
     ]
 
     # MEDIUM confidence - context suggests production year
@@ -89,6 +92,10 @@ class ContextAwarePatterns:
         # With explicit context (najeto, nájezd, aktuální, skutečných, etc.) + km
         re.compile(r'(?:najeto|nájezd|aktuální\s+nájezd|skutečných|počet\s+km|km\s+celkem)\s*(?:skutečných|jasně|doložených|je)?\s*[:.]?\s*((\d{1,3}(?:[\s._]?\d{3})+)\s?km)', re.IGNORECASE),  # "najeto 200 000 km", "najeto: 201.455 km", "NAJETO SKUTEČNÝCH 142.981KM", "aktuální nájezd je 59.900 km"
         re.compile(r'((\d{1,3}(?:[\s._]?\d{3})+)\s?km)\s+(?:najeto|celkem)', re.IGNORECASE),  # "200 000 km najeto"
+
+        # "Km:" / "km:" as label prefix (e.g., "Km: 469.235", "km: 150 000")
+        re.compile(r'[Kk][Mm]\s*:\s*((\d{1,3}(?:[\s._]?\d{3})+))', re.IGNORECASE),  # "Km: 469.235", "km: 150 000"
+        re.compile(r'[Kk][Mm]\s*:\s*((\d{4,6}))', re.IGNORECASE),  # "Km: 150000", "km:469235"
 
         # With explicit context + separator BUT NO km (needs explicit "najeto" context)
         re.compile(r'(?:najeto|nájezd|aktuální\s+nájezd)\s*(?:skutečných|je)?\s*[:.]?\s*((\d{1,3}[\s._]\d{3}(?:[\s._]\d{3})?)(?!\s?km))', re.IGNORECASE),  # "najeto 123 000", "najeto 123.000"
