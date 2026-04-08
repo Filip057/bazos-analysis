@@ -23,11 +23,30 @@ __pycache__/
 venv/
 env/
 
-# Training data (local only)
+# Training data and labeling artifacts (local only)
 training_*.json
+training_*.txt
 filtered_*.json
+filtered_*.txt
+auto_training_*.json
+unlabeled_*.json
+manual_review_*
+review_queue*.json
+temp_combined_*.json
+test_merged.json
+benchmark_*.json
 *_texts.txt
 *.backup
+
+# Training reports
+training_reports/
+
+# Analytics CSV exports
+analysis_*.csv
+gap_analysis.csv
+incomplete_offers.csv
+unknown_models.csv
+test_data.csv
 
 # Logs
 *.log
