@@ -139,6 +139,12 @@ def api_auth_me():
     return jsonify({"username": payload.get("username"), "id": payload.get("sub")})
 
 
+@app.route("/health")
+def health():
+    """Lightweight liveness probe — does not touch the database."""
+    return jsonify({"status": "ok"}), 200
+
+
 @app.route("/")
 def hello_world():
     return render_template("index.html")

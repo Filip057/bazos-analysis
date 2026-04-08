@@ -31,5 +31,6 @@ USER bazos
 
 EXPOSE 8000
 
-# Production WSGI server — 2 workers, 120s timeout for slow ML extraction
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "120", "--access-logfile", "-", "webapp.app:app"]
+# Production WSGI server — binds to $PORT (Railway/Heroku) or 8000 locally.
+# Shell form so the env var is expanded at runtime.
+CMD gunicorn --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120 --access-logfile - webapp.app:app
