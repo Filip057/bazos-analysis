@@ -16,6 +16,7 @@ Když budeš připraven, řekni Claude "zpracuj extraction issues" a on:
 - **Kontext:** volitelná poznámka (např. URL, co se stalo)
 ```
 
+
 Pole: MILEAGE, YEAR, FUEL, POWER
 
 ---

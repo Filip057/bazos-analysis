@@ -1,18 +1,65 @@
+# VCS
+.git/
+.gitignore
+.gitattributes
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
+*.egg-info/
 venv/
 env/
+.venv/
+
+# Local config / secrets
 .env
-.git/
-.gitignore
+.env.production
+.env.local
+
+# Logs and runtime artifacts
 *.log
-*.db
-*.sqlite
-*.sqlite3
-nltk_data/
-get-pip.py
+scraper.log
 pipeline_checkpoints/
 training_reports/
 *.backup
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Docs (not needed at runtime)
 docs/
+*.md
+!README.md
+
+# Tests (skip in production image)
+tests/
+
+# Local-only scripts — exclude all by default, but keep create_admin.py
+# so admins can be provisioned inside the running container.
+scripts/*
+!scripts/create_admin.py
+!scripts/__init__.py
+
+# Training data (large local files)
+training_*.json
+filtered_*.json
+*_texts.txt
+extraction_stats.json
+review_queue.json
+manual_review_data.json
+training_queue.json
+error_analysis_report.json
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+nltk_data/
+get-pip.py
+
+# CSV exports / analysis dumps
+*.csv

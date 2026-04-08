@@ -29,9 +29,10 @@
             <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/dashboard">Dashboard</a>
             <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/car-compare">Car compare</a>
             <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/deals">Výhodné nabídky</a>
-            <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/admin/browser">Data Browser</a>
-            <a class="list-group-item list-group-item-action list-group-item-light p-3 active" href="/admin/suspicious">Podezřelé nabídky</a>
+            <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/admin/browser" data-admin-only>Data Browser</a>
+            <a class="list-group-item list-group-item-action list-group-item-light p-3 active" href="/admin/suspicious" data-admin-only>Podezřelé nabídky</a>
         </div>
+        <div id="auth-slot"></div>
     </div>
 
     <div id="page-content-wrapper">
@@ -210,8 +211,9 @@
     </div>
 </div>
 
+<script src="/static/js/auth.js"></script>
 <script>
-const CSRF = document.querySelector('meta[name="csrf-token"]').content;
+window.adminAuth.requireAdmin();
 let currentPage = 1;
 const perPage = 50;
 let editingId = null;
@@ -236,16 +238,16 @@ function cellEnd(value, formatter) {
 
 async function apiFetch(url) {
     try {
-        const r = await fetch(url);
+        const r = await window.adminAuth.authFetch(url);
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return await r.json();
     } catch (e) { console.error(url, e); return null; }
 }
 async function apiMutate(url, method, body) {
     try {
-        const opts = { method, headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF } };
+        const opts = { method };
         if (body) opts.body = JSON.stringify(body);
-        const r = await fetch(url, opts);
+        const r = await window.adminAuth.authFetch(url, opts);
         return { ok: r.ok, data: await r.json() };
     } catch (e) { return { ok: false, data: { error: e.message } }; }
 }

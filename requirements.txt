@@ -75,3 +75,5 @@ wrapt==2.0.1
 WTForms==3.2.1
 yarl==1.18.3
 zipp==3.21.0
+bcrypt==5.0.0
+PyJWT==2.12.1

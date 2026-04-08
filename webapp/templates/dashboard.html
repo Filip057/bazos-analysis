@@ -67,9 +67,10 @@
             <a class="list-group-item list-group-item-action list-group-item-light p-3 active" href="/dashboard">Dashboard</a>
             <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/car-compare">Car compare</a>
             <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/deals">Výhodné nabídky</a>
-            <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/admin/browser">Data Browser</a>
-            <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/admin/suspicious">Podezřelé nabídky</a>
+            <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/admin/browser" data-admin-only>Data Browser</a>
+            <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/admin/suspicious" data-admin-only>Podezřelé nabídky</a>
         </div>
+        <div id="auth-slot"></div>
     </div>
 
     <!-- Page content -->
@@ -587,5 +588,6 @@ document.getElementById('scatter-model-filter').addEventListener('change', () =>
 
 init();
 </script>
+<script src="/static/js/auth.js"></script>
 </body>
 </html>

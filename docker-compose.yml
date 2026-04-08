@@ -11,13 +11,21 @@ services:
       - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./migrations/init_database.sql:/docker-entrypoint-initdb.d/01_init.sql
-      - ./migrations/add_fuel_scraped_at.sql:/docker-entrypoint-initdb.d/02_fuel_scraped.sql
+      # Migrations run in alphabetical order on first DB initialization.
+      # Numeric prefixes enforce the correct sequence.
+      - ./migrations/init_database.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+      - ./migrations/add_fuel_scraped_at.sql:/docker-entrypoint-initdb.d/02_fuel_scraped.sql:ro
+      - ./migrations/add_listing_date_view_count.sql:/docker-entrypoint-initdb.d/03_listing_date_views.sql:ro
+      - ./migrations/add_review_status.sql:/docker-entrypoint-initdb.d/04_review_status.sql:ro
+      - ./migrations/add_admins_table.sql:/docker-entrypoint-initdb.d/05_admins.sql:ro
+      # car_view depends on all offer columns — must run last
+      - ./migrations/create_car_view.sql:/docker-entrypoint-initdb.d/99_car_view.sql:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-bazos_root_pass}"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 30s
 
   web:
     build: .
@@ -33,6 +41,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
 volumes:
   mysql_data:

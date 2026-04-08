@@ -16,9 +16,14 @@ from sqlalchemy import create_engine, func, text
 from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy.exc import NoResultFound, SQLAlchemyError
 
-from database.model import Base, Car, Offer, init_database
+from datetime import datetime
+
+from database.model import Base, Car, Offer, Admin, init_database
 from webapp.config import get_config
 from webapp.deal_detection import find_deals, score_single_offer, find_suspicious
+from webapp.auth import (
+    admin_required, hash_password, verify_password, issue_token,
+)
 from database.admin_operations import (
     update_offer_fields, delete_offer, get_data_quality_summary,
     bulk_normalize_fuel, bulk_fix_misplaced, EDITABLE_FIELDS,
@@ -83,6 +88,55 @@ def get_db_session():
         raise
     finally:
         DBSession.remove()
+
+
+# =============================================================================
+# AUTH — admin login (JWT, 24h tokens)
+# =============================================================================
+
+@app.route("/api/auth/login", methods=["POST"])
+@limiter.limit("5 per minute")
+@csrf.exempt
+def api_auth_login():
+    """
+    Authenticate an admin and return a JWT.
+
+    JSON body: {"username": "...", "password": "..."}
+    On success: {"token": "...", "username": "...", "expires_in": 86400}
+    """
+    data = request.get_json(silent=True) or {}
+    username = (data.get("username") or "").strip()
+    password = data.get("password") or ""
+
+    if not username or not password:
+        return jsonify({"error": "username and password are required"}), 400
+
+    try:
+        with get_db_session() as session:
+            admin = session.query(Admin).filter(Admin.username == username).first()
+            if not admin or not verify_password(password, admin.password_hash):
+                # Same error for both cases — don't leak which one is wrong
+                return jsonify({"error": "Invalid credentials"}), 401
+
+            admin.last_login = datetime.utcnow()
+            token = issue_token(admin.id, admin.username)
+            return jsonify({
+                "token": token,
+                "username": admin.username,
+                "expires_in": 24 * 3600,
+            })
+    except SQLAlchemyError as e:
+        logger.error(f"DB error in api_auth_login: {e}")
+        return jsonify({"error": "Database error"}), 500
+
+
+@app.route("/api/auth/me")
+@limiter.limit("60 per minute")
+@admin_required
+def api_auth_me():
+    """Return the currently authenticated admin (verifies token)."""
+    payload = request.admin  # type: ignore[attr-defined]
+    return jsonify({"username": payload.get("username"), "id": payload.get("sub")})
 
 
 @app.route("/")
@@ -554,6 +608,7 @@ def suspicious_page():
 
 @app.route("/api/admin/suspicious")
 @limiter.limit("30 per minute")
+@admin_required
 def api_admin_suspicious():
     """
     Find offers that look like deals but are likely data errors.
@@ -593,6 +648,7 @@ def api_admin_suspicious():
 
 @app.route("/api/admin/offers")
 @limiter.limit("60 per minute")
+@admin_required
 def api_admin_offers():
     """
     Paginated offer browser with filters.
@@ -674,6 +730,8 @@ def api_admin_offers():
 
 @app.route("/api/admin/offers/<int:offer_id>", methods=["PATCH"])
 @limiter.limit("30 per minute")
+@csrf.exempt
+@admin_required
 def api_admin_update_offer(offer_id: int):
     """
     Update one or more fields on an offer.
@@ -706,6 +764,8 @@ def api_admin_update_offer(offer_id: int):
 
 @app.route("/api/admin/offers/<int:offer_id>", methods=["DELETE"])
 @limiter.limit("10 per minute")
+@csrf.exempt
+@admin_required
 def api_admin_delete_offer(offer_id: int):
     """Delete a single junk offer."""
     try:
@@ -721,6 +781,7 @@ def api_admin_delete_offer(offer_id: int):
 
 @app.route("/api/admin/quality/summary")
 @limiter.limit("30 per minute")
+@admin_required
 def api_admin_quality_summary():
     """Data completeness stats and anomaly counts."""
     try:
@@ -733,6 +794,8 @@ def api_admin_quality_summary():
 
 @app.route("/api/admin/quality/normalize-fuel", methods=["POST"])
 @limiter.limit("5 per minute")
+@csrf.exempt
+@admin_required
 def api_admin_normalize_fuel():
     """Run bulk fuel normalization."""
     try:
@@ -746,6 +809,8 @@ def api_admin_normalize_fuel():
 
 @app.route("/api/admin/quality/fix-misplaced", methods=["POST"])
 @limiter.limit("5 per minute")
+@csrf.exempt
+@admin_required
 def api_admin_fix_misplaced():
     """Run bulk misplaced value fix."""
     try:

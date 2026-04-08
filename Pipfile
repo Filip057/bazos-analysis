@@ -22,6 +22,8 @@ aiomysql = "*"
 flask-wtf = "*"
 flask-restful = "*"
 flask-cors = "*"
+bcrypt = "*"
+pyjwt = "*"
 
 [dev-packages]
 

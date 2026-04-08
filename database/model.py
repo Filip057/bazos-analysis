@@ -111,6 +111,17 @@ class Car(Base):
             'review_status': self.review_status,
         }
 
+# Admin users (super admins with full access to admin endpoints)
+class Admin(Base):
+    __tablename__ = 'admins'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String(length=80), unique=True, nullable=False)
+    password_hash = Column(String(length=255), nullable=False)
+    created_at = Column(DateTime, nullable=True)
+    last_login = Column(DateTime, nullable=True)
+
+
 # ENGINE
 engine = create_engine(DATABASE_URI)
 
