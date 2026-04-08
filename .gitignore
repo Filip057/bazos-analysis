@@ -32,6 +32,24 @@ filtered_*.json
 # Logs
 *.log
 scraper.log
+webapp.log
+pipeline.log
+pipeline_full_run.log
+
+# OS junk
+.DS_Store
+**/.DS_Store
+Thumbs.db
+
+# Pipeline runtime artifacts
+pipeline_checkpoints/
+
+# Pytest cache
+.pytest_cache/
+
+# Local SQLite (legacy)
+bazos_cars.db
+get-pip.py
 
 # Generated ML/extraction data
 extraction_stats.json
