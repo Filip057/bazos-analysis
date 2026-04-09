@@ -28,6 +28,7 @@ from database.admin_operations import (
     update_offer_fields, delete_offer, get_data_quality_summary,
     bulk_normalize_fuel, bulk_fix_misplaced, EDITABLE_FIELDS,
 )
+from scraper.scrape_service import ScrapeJobManager
 
 # Sanity bounds for filtering outliers in statistics
 MAX_REASONABLE_MILEAGE = 1_000_000  # km
@@ -826,6 +827,92 @@ def api_admin_fix_misplaced():
     except SQLAlchemyError as e:
         logger.error(f"DB error in api_admin_fix_misplaced: {e}")
         return jsonify({"error": "Database error"}), 500
+
+
+# =============================================================================
+# SCRAPING CONTROL — admin-triggered scraping with background threading
+# =============================================================================
+
+scrape_manager = ScrapeJobManager()
+
+
+@app.route("/admin/scraping")
+def admin_scraping_page():
+    """Scraping control panel (admin-only, enforced client-side)."""
+    return render_template("admin-scraping.html")
+
+
+@app.route("/api/admin/scrape/start", methods=["POST"])
+@limiter.limit("5 per minute")
+@csrf.exempt
+@admin_required
+def api_admin_scrape_start():
+    """
+    Start a new scraping job in a background thread.
+
+    JSON body: {"brands": ["skoda", "volkswagen"]} or omit for all brands.
+    Returns 202 on success, 409 if a job is already running.
+    """
+    data = request.get_json(silent=True) or {}
+    brands = data.get("brands")
+
+    # Normalize: list of strings or None for all
+    if isinstance(brands, str):
+        brands = [brands]
+    if brands and not isinstance(brands, list):
+        return jsonify({"error": "brands must be a list of strings or omitted for all"}), 400
+
+    result = scrape_manager.start_job(brands=brands)
+    if result is None:
+        return jsonify({"error": "A scraping job is already running"}), 409
+
+    return jsonify(result), 202
+
+
+@app.route("/api/admin/scrape/status")
+@limiter.limit("60 per minute")
+@admin_required
+def api_admin_scrape_status():
+    """Return the current or most recent active scraping job status."""
+    job_id = request.args.get("job_id")
+    if job_id:
+        job = scrape_manager.get_job_status(job_id)
+    else:
+        job = scrape_manager.get_active_job()
+    return jsonify({"job": job})
+
+
+@app.route("/api/admin/scrape/cancel", methods=["POST"])
+@limiter.limit("10 per minute")
+@csrf.exempt
+@admin_required
+def api_admin_scrape_cancel():
+    """Cancel a running scraping job."""
+    data = request.get_json(silent=True) or {}
+    job_id = data.get("job_id", "")
+    if not job_id:
+        return jsonify({"error": "job_id is required"}), 400
+
+    if scrape_manager.cancel_job(job_id):
+        return jsonify({"ok": True})
+    return jsonify({"error": "Job not found or not running"}), 404
+
+
+@app.route("/api/admin/scrape/history")
+@limiter.limit("30 per minute")
+@admin_required
+def api_admin_scrape_history():
+    """Return recent scrape job history."""
+    limit = min(request.args.get("limit", 20, type=int), 50)
+    return jsonify({"jobs": scrape_manager.get_job_history(limit=limit)})
+
+
+@app.route("/api/admin/scrape/db-stats")
+@limiter.limit("30 per minute")
+@admin_required
+def api_admin_scrape_db_stats():
+    """Return offer counts per brand and totals."""
+    return jsonify(scrape_manager.get_db_stats())
 
 
 @app.route('/car-compare')

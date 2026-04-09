@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>Scraping Control – Bazos Analysis</title>
+    <link href="/static/css/styles.css" rel="stylesheet" />
+    <style>
+        .stat-card {
+            border: 1px solid #dee2e6; border-radius: 8px;
+            padding: 1rem 1.25rem; background: #fff; margin-bottom: 1rem;
+        }
+        .stat-card .value { font-size: 1.6rem; font-weight: 700; color: #0d6efd; }
+        .stat-card .label { font-size: 0.8rem; color: #6c757d; text-transform: uppercase; letter-spacing: .05em; }
+        .progress-section { background: #f8f9fa; border-radius: 8px; padding: 1.25rem; margin-bottom: 1.5rem; }
+        .history-table td, .history-table th { font-size: 0.85rem; vertical-align: middle; }
+        .brand-badge { font-size: 0.75rem; margin: 2px; }
+        .status-badge { font-size: 0.78rem; }
+        .toast-container { position: fixed; top: 1rem; right: 1rem; z-index: 9999; }
+    </style>
+</head>
+<body>
+<div class="d-flex" id="wrapper">
+    <!-- Sidebar -->
+    <div class="border-end bg-white" id="sidebar-wrapper">
+        <div class="sidebar-heading border-bottom bg-light">MENU</div>
+        <div class="list-group list-group-flush">
+            <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/">Home</a>
+            <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/dashboard">Dashboard</a>
+            <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/car-compare">Car compare</a>
+            <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/deals">Výhodné nabídky</a>
+            <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/admin/browser" data-admin-only>Data Browser</a>
+            <a class="list-group-item list-group-item-action list-group-item-light p-3" href="/admin/suspicious" data-admin-only>Podezřelé nabídky</a>
+            <a class="list-group-item list-group-item-action list-group-item-light p-3 active" href="/admin/scraping" data-admin-only>Scraping</a>
+        </div>
+        <div id="auth-slot"></div>
+    </div>
+
+    <!-- Page content -->
+    <div id="page-content-wrapper">
+        <nav class="navbar navbar-expand-lg navbar-light bg-light border-bottom">
+            <div class="container-fluid">
+                <button class="btn btn-sm btn-outline-secondary me-2" id="sidebarToggle">&#9776;</button>
+                <span class="navbar-brand mb-0 h6">Bazos Analysis — Scraping</span>
+            </div>
+        </nav>
+
+        <div class="container-fluid p-4">
+
+            <!-- DB Stats -->
+            <h5 class="mb-3">Statistiky databáze</h5>
+            <div class="row mb-4" id="stats-row">
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="label">Celkem nabídek</div>
+                        <div class="value" id="stat-total">—</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="label">Počet značek</div>
+                        <div class="value" id="stat-brands">—</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="label">Poslední scraping</div>
+                        <div class="value" id="stat-last-scrape" style="font-size:1rem;">—</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Brand breakdown -->
+            <div class="mb-4" id="brand-breakdown" style="display:none;">
+                <h6>Nabídky dle značky</h6>
+                <div class="row" id="brand-cards"></div>
+            </div>
+
+            <!-- Scrape Controls -->
+            <h5 class="mb-3">Spustit scraping</h5>
+            <div class="progress-section" id="control-section">
+                <div class="row align-items-end g-3">
+                    <div class="col-md-4">
+                        <label class="form-label small fw-semibold text-muted">Značka</label>
+                        <select id="scrape-brand" class="form-select form-select-sm">
+                            <option value="all">Všechny značky</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-primary btn-sm w-100" id="btn-start" onclick="startScrape()">
+                            Spustit scraping
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Progress (hidden when no job) -->
+            <div class="progress-section" id="progress-section" style="display:none;">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6 class="mb-0">
+                        <span class="spinner-border spinner-border-sm text-primary me-2" id="progress-spinner"></span>
+                        Scraping probíhá...
+                    </h6>
+                    <button class="btn btn-outline-danger btn-sm" id="btn-cancel" onclick="cancelScrape()">
+                        Zrušit
+                    </button>
+                </div>
+                <div class="mb-2">
+                    <small class="text-muted">Aktuální značka: </small>
+                    <strong id="progress-brand">—</strong>
+                </div>
+                <div class="progress mb-2" style="height: 22px;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" id="progress-bar"
+                         role="progressbar" style="width: 0%">0%</div>
+                </div>
+                <div class="row text-center" style="font-size:0.85rem;">
+                    <div class="col"><strong id="p-saved">0</strong> uloženo</div>
+                    <div class="col"><strong id="p-filtered">0</strong> filtrováno</div>
+                    <div class="col"><strong id="p-failed">0</strong> chyb</div>
+                    <div class="col"><strong id="p-processed">0</strong> celkem</div>
+                </div>
+                <div class="mt-2" id="brands-done-section" style="display:none;">
+                    <small class="text-muted">Hotové značky: </small>
+                    <span id="brands-done-list"></span>
+                </div>
+            </div>
+
+            <!-- Completed banner (hidden) -->
+            <div class="alert alert-success" id="completed-banner" style="display:none;">
+                <strong>Scraping dokončen!</strong>
+                <span id="completed-summary"></span>
+            </div>
+
+            <!-- Job History -->
+            <h5 class="mb-3 mt-4">Historie scrapingu</h5>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover history-table">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Job ID</th>
+                            <th>Status</th>
+                            <th>Značky</th>
+                            <th>Uloženo</th>
+                            <th>Filtrováno</th>
+                            <th>Chyby</th>
+                            <th>Zahájeno</th>
+                            <th>Trvání</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-body">
+                        <tr><td colspan="8" class="text-muted text-center">Načítání...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+        </div><!-- /container-fluid -->
+    </div><!-- /page-content-wrapper -->
+</div><!-- /wrapper -->
+
+<!-- Toast container -->
+<div class="toast-container" id="toast-container"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/static/js/auth.js"></script>
+<script src="/static/js/scraping.js"></script>
+<script>
+// Auth gate
+window.adminAuth.requireAdmin();
+
+document.getElementById('sidebarToggle').addEventListener('click', () => {
+    document.getElementById('wrapper').classList.toggle('toggled');
+});
+</script>
+</body>
+</html>

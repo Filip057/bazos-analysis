@@ -45,8 +45,9 @@ CLI:
 import asyncio
 import logging
 import re
+import threading
 import time
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 import aiomysql
 import aiohttp
@@ -101,15 +102,21 @@ class PipelineRunner:
         skip_db: bool = False,
         max_concurrent: int = MAX_CONCURRENT_REQUESTS,
         url_limit: Optional[int] = None,
+        progress_callback: Optional[Callable[[dict], None]] = None,
+        cancel_event: Optional[threading.Event] = None,
     ):
         self.checkpoint = checkpoint or CheckpointManager()
         self.skip_db = skip_db
         self.max_concurrent = max_concurrent
         self.url_limit = url_limit
+        self.progress_callback = progress_callback
+        self.cancel_event = cancel_event
         self.extractor: Optional[ProductionExtractor] = None
         self._runtime_stats = {
             "saved": 0, "failed": 0, "filtered": 0, "skipped": 0
         }
+        self._current_brand: Optional[str] = None
+        self._brands_done: List[str] = []
 
     # ------------------------------------------------------------------
     # Class-level constructors for resume
@@ -210,6 +217,11 @@ class PipelineRunner:
         total_processed = 0
         total_brands = len(brand_list)
         for brand_idx, (brand, brand_url) in enumerate(brand_list, 1):
+            # Check for cancellation before each brand
+            if self.cancel_event and self.cancel_event.is_set():
+                logger.info("Cancellation requested. Stopping pipeline.")
+                break
+
             if self.checkpoint.is_brand_done(brand):
                 logger.info(f"  [{brand_idx}/{total_brands}] Skipping '{brand}' (already completed)")
                 self._runtime_stats["skipped"] += 1
@@ -217,6 +229,7 @@ class PipelineRunner:
 
             try:
                 brand_start = time.time()
+                self._current_brand = brand
                 logger.info(f"  [{brand_idx}/{total_brands}] Processing brand: {brand}")
                 saved_before = self._runtime_stats["saved"]
                 filtered_before = self._runtime_stats["filtered"]
@@ -239,6 +252,8 @@ class PipelineRunner:
                     break
 
                 self.checkpoint.mark_brand_done(brand)
+                self._brands_done.append(brand)
+                self._report_progress()
             except Exception as e:
                 # Brand-level error: log and continue with next brand
                 logger.error(f"  [{brand_idx}/{total_brands}] Brand '{brand}' failed: {e}. Continuing...")
@@ -260,6 +275,11 @@ class PipelineRunner:
 
         # Process page by page (not all at once to avoid memory blowup)
         for page_idx, page_url in enumerate(pages, 1):
+            # Check for cancellation between pages
+            if self.cancel_event and self.cancel_event.is_set():
+                logger.info(f"    Cancellation requested during brand '{brand}'.")
+                break
+
             try:
                 detail_urls = await self._get_detail_urls(page_url, http_session, semaphore)
                 logger.info(f"    Page {page_idx}/{len(pages)}: Found {len(detail_urls)} offers")
@@ -283,6 +303,7 @@ class PipelineRunner:
                     await asyncio.gather(*tasks, return_exceptions=True)
                     processed_count += len(chunk)
                     logger.info(f"    Processed {processed_count} offers total")
+                    self._report_progress()
             except Exception as e:
                 # Page-level error: log and continue with next page
                 logger.error(f"    Page {page_url} failed: {e}. Skipping page.")
@@ -436,6 +457,22 @@ class PipelineRunner:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _report_progress(self) -> None:
+        """Send current stats to the progress callback, if set."""
+        if not self.progress_callback:
+            return
+        try:
+            self.progress_callback({
+                "current_brand": self._current_brand,
+                "brands_done": list(self._brands_done),
+                "processed_urls": sum(self._runtime_stats.values()),
+                "saved": self._runtime_stats["saved"],
+                "failed": self._runtime_stats["failed"],
+                "filtered": self._runtime_stats["filtered"],
+            })
+        except Exception as exc:
+            logger.warning("Progress callback failed: %s", exc)
 
     async def _resolve_brands(self, brands, http_session, semaphore) -> List[Tuple[str, str]]:
         """Resolve brand names to (brand, url) pairs."""

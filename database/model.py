@@ -1,5 +1,5 @@
 from sqlalchemy.orm import DeclarativeBase, relationship
-from sqlalchemy import Column, Integer, String, BigInteger, ForeignKey, Float, Index, DateTime, Date
+from sqlalchemy import Column, Integer, String, BigInteger, ForeignKey, Float, Index, DateTime, Date, Text
 from sqlalchemy import create_engine
 from webapp.config import get_config
 
@@ -120,6 +120,51 @@ class Admin(Base):
     password_hash = Column(String(length=255), nullable=False)
     created_at = Column(DateTime, nullable=True)
     last_login = Column(DateTime, nullable=True)
+
+
+# Scraping job tracking (admin-triggered scrape sessions)
+class ScrapeJob(Base):
+    """Tracks scraping jobs triggered from the admin UI."""
+    __tablename__ = 'scrape_jobs'
+    __table_args__ = (
+        Index('idx_status', 'status'),
+        Index('idx_started_at', 'started_at'),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    job_id = Column(String(length=50), unique=True, nullable=False)
+    status = Column(String(length=20), nullable=False, default='queued')
+    brands = Column(Text, nullable=True)           # JSON array or "all"
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    current_brand = Column(String(length=50), nullable=True)
+    brands_done = Column(Text, nullable=True)       # JSON array
+    total_urls = Column(Integer, nullable=False, default=0)
+    processed_urls = Column(Integer, nullable=False, default=0)
+    saved_count = Column(Integer, nullable=False, default=0)
+    failed_count = Column(Integer, nullable=False, default=0)
+    filtered_count = Column(Integer, nullable=False, default=0)
+    error_message = Column(Text, nullable=True)
+    worker_pid = Column(Integer, nullable=True)
+
+    def serialize(self) -> dict:
+        """Serialize job to JSON-safe dict."""
+        import json
+        return {
+            'job_id': self.job_id,
+            'status': self.status,
+            'brands': json.loads(self.brands) if self.brands else None,
+            'started_at': self.started_at.isoformat() if self.started_at else None,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+            'current_brand': self.current_brand,
+            'brands_done': json.loads(self.brands_done) if self.brands_done else [],
+            'total_urls': self.total_urls,
+            'processed_urls': self.processed_urls,
+            'saved_count': self.saved_count,
+            'failed_count': self.failed_count,
+            'filtered_count': self.filtered_count,
+            'error_message': self.error_message,
+        }
 
 
 # ENGINE

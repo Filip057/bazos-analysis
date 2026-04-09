@@ -38,7 +38,9 @@ import nltk
 nltk.download('punkt')
 stopwords_set = set()
 
-with open('stopwords-cs.txt', 'r', encoding='utf-8') as file:
+from pathlib import Path as _Path
+_STOPWORDS_PATH = _Path(__file__).resolve().parent.parent / 'ml' / 'stopwords-cs.txt'
+with open(_STOPWORDS_PATH, 'r', encoding='utf-8') as file:
     for line in file:
         word = line.strip()  # Remove leading/trailing whitespace and newline characters
         stopwords_set.add(word)
