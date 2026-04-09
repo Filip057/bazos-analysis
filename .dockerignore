@@ -38,11 +38,12 @@ docs/
 # Tests (skip in production image)
 tests/
 
-# Local-only scripts — exclude all by default, but keep create_admin.py
-# so admins can be provisioned inside the running container.
-scripts/*
-!scripts/create_admin.py
-!scripts/__init__.py
+# Local-only dev/ML utilities — never need to ship to production
+dev_scripts/
+
+# Note: scripts/ used to be excluded entirely, but it now contains
+# create_admin.py which must be available inside the production image
+# so admins can be provisioned via `railway ssh`. Keep it included.
 
 # Training data (large local files)
 training_*.json
