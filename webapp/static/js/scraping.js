@@ -41,14 +41,17 @@ async function loadDbStats() {
             });
         }
 
-        // Populate brand dropdown
+        // Populate brand dropdown from all available brands
         const select = document.getElementById('scrape-brand');
+        const countMap = {};
+        data.brands.forEach(b => { countMap[b.name] = b.count; });
         // Keep "all" option, remove old brand options
         while (select.options.length > 1) select.remove(1);
-        data.brands.forEach(b => {
+        (data.available_brands || []).forEach(name => {
             const opt = document.createElement('option');
-            opt.value = b.name;
-            opt.textContent = `${b.name} (${b.count})`;
+            opt.value = name;
+            const count = countMap[name];
+            opt.textContent = count ? `${name} (${count})` : name;
             select.appendChild(opt);
         });
     } catch (err) {

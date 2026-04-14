@@ -25,6 +25,7 @@ from sqlalchemy import create_engine, func, desc
 from sqlalchemy.orm import sessionmaker, scoped_session
 
 from database.model import Base, ScrapeJob, Brand, Model, Offer
+from scraper.data_scrap import CAR_BRANDS
 from webapp.config import get_config
 
 logger = logging.getLogger(__name__)
@@ -217,8 +218,12 @@ class ScrapeJobManager:
 
             latest_scrape = session.query(func.max(Offer.scraped_at)).scalar()
 
+            # Build lookup of counts per brand
+            count_map = {name: count for name, count in brand_counts}
+
             return {
                 "total_offers": total,
+                "available_brands": sorted(CAR_BRANDS),
                 "brands": [
                     {"name": name, "count": count}
                     for name, count in brand_counts
