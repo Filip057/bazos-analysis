@@ -399,10 +399,14 @@ class PipelineRunner:
 
     async def _save_to_db(self, db_pool, car_data: dict):
         """Save a single car offer to the database (upsert by unique_id)."""
-        # Synchronous model_id lookup (cached)
+        # Synchronous model_id lookup (auto-creates missing brands/models)
         session = Session()
         try:
             model_id = get_model_id_sync(session, car_data["brand"], car_data["model"])
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
         finally:
             session.close()
 

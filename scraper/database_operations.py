@@ -231,7 +231,7 @@ _model_cache: Dict[tuple, Optional[int]] = {}
 
 
 def get_model_id_sync(session, brand_name: str, model_name: Optional[str]) -> Optional[int]:
-    """Synchronous model ID lookup with caching"""
+    """Synchronous model ID lookup with auto-create for missing brands/models."""
     if not model_name:
         return None
 
@@ -243,17 +243,24 @@ def get_model_id_sync(session, brand_name: str, model_name: Optional[str]) -> Op
     if cache_key in _model_cache:
         return _model_cache[cache_key]
 
-    # Query database
+    # Query or create brand
     brand = session.query(Brand).filter(Brand.name.ilike(brand_name)).first()
+    if not brand:
+        brand = Brand(name=brand_name)
+        session.add(brand)
+        session.flush()
+        logger.info("Auto-created brand: %s", brand_name)
 
-    if brand:
-        model = session.query(Model).filter(Model.name.ilike(model_name), Model.brand_id == brand.id).first()
-        if model:
-            _model_cache[cache_key] = model.id
-            return model.id
+    # Query or create model
+    model = session.query(Model).filter(Model.name.ilike(model_name), Model.brand_id == brand.id).first()
+    if not model:
+        model = Model(name=model_name, brand_id=brand.id)
+        session.add(model)
+        session.flush()
+        logger.info("Auto-created model: %s / %s", brand_name, model_name)
 
-    _model_cache[cache_key] = None
-    return None
+    _model_cache[cache_key] = model.id
+    return model.id
 
 
 async def fetch_data_into_database(data: List[Dict], batch_size: int = 100):
