@@ -353,7 +353,7 @@ class PipelineRunner:
                 self._runtime_stats["failed"] += 1
                 return "failed"
 
-            description, heading, price = parsed
+            description, heading, price, listing_date, view_count = parsed
 
             # 4. Filter non-car items (tires, parts, motorcycles, ...)
             if not check_if_car(description, heading, price):
@@ -374,6 +374,8 @@ class PipelineRunner:
                 "fuel": extraction.get("fuel"),
                 "price": price,
                 "url": url,
+                "listing_date": listing_date,
+                "view_count": view_count,
                 "extraction_confidence": extraction.get("confidence"),
             }
 
@@ -427,9 +429,9 @@ class PipelineRunner:
         INSERT INTO offers (
             model_id, year_manufacture, mileage, power, fuel,
             price, url, years_in_usage, price_per_km, mileage_per_year,
-            unique_id, scraped_at
+            unique_id, scraped_at, listing_date, view_count
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s)
         ON DUPLICATE KEY UPDATE
             year_manufacture = VALUES(year_manufacture),
             mileage          = VALUES(mileage),
@@ -439,7 +441,9 @@ class PipelineRunner:
             years_in_usage   = VALUES(years_in_usage),
             price_per_km     = VALUES(price_per_km),
             mileage_per_year = VALUES(mileage_per_year),
-            scraped_at       = NOW()
+            scraped_at       = NOW(),
+            listing_date     = VALUES(listing_date),
+            view_count       = VALUES(view_count)
         """
         async with db_pool.acquire() as conn:
             async with conn.cursor() as cur:
@@ -455,6 +459,8 @@ class PipelineRunner:
                     price_per_km,
                     mileage_per_year,
                     unique_id,
+                    car_data["listing_date"],
+                    car_data["view_count"],
                 ))
                 await conn.commit()
 
@@ -493,10 +499,14 @@ class PipelineRunner:
             logger.info("No brands specified — fetching all from Bazos.cz")
             return await get_brand_urls(http_session, semaphore)
 
+    # Pre-compiled patterns for listing metadata
+    _LISTING_DATE_PATTERN = re.compile(r'\[(\d{1,2})\.(\d{1,2})\.\s*(\d{4})\]')
+    _VIEW_COUNT_PATTERN = re.compile(r'(\d+)\s+lid[ií]')
+
     def _parse_car_page(self, html: str):
         """
         Parse car detail page HTML.
-        Returns (description, heading, price) or None if parsing fails.
+        Returns (description, heading, price, listing_date, view_count) or None if parsing fails.
         """
         try:
             soup = BeautifulSoup(html, "html.parser")
@@ -511,7 +521,25 @@ class PipelineRunner:
             )
             price_digits = "".join(re.findall(r"\d+", price_nc))
             price = int(price_digits) if price_digits else None
-            return description, heading, price
+
+            # Extract listing creation date: [1.2. 2026]
+            listing_date = None
+            heading_div = soup.find('div', class_='inzeratydetnadpis')
+            if heading_div:
+                date_match = self._LISTING_DATE_PATTERN.search(heading_div.text)
+                if date_match:
+                    day, month, year = date_match.group(1), date_match.group(2), date_match.group(3)
+                    listing_date = f"{year}-{month.zfill(2)}-{day.zfill(2)}"
+
+            # Extract view count: "1959 lidí"
+            view_count = None
+            detail_table = soup.find('td', class_='listadvlevo')
+            if detail_table:
+                view_match = self._VIEW_COUNT_PATTERN.search(detail_table.text)
+                if view_match:
+                    view_count = int(view_match.group(1))
+
+            return description, heading, price, listing_date, view_count
         except (AttributeError, IndexError, ValueError):
             return None
 
