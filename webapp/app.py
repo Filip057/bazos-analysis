@@ -207,56 +207,52 @@ def api_models(brand):
 @limiter.limit("60 per minute")
 def stats_overview():
     """
-    High-level DB summary.
+    High-level DB summary — single query instead of 7 separate ones.
 
     Returns total cars, brands, averages, and data completeness.
     """
     try:
         with get_db_session() as session:
-            total_cars = session.query(Car).count()
+            row = session.query(
+                func.count(Car.id).label("total"),
+                func.count(func.distinct(Car.brand)).label("brands"),
+                func.avg(func.IF(
+                    (Car.price > 0) & (Car.price < MAX_REASONABLE_PRICE),
+                    Car.price, None
+                )).label("avg_price"),
+                func.avg(func.IF(
+                    (Car.mileage > 0) & (Car.mileage < MAX_REASONABLE_MILEAGE),
+                    Car.mileage, None
+                )).label("avg_mileage"),
+                func.avg(Car.year_manufacture).label("avg_year"),
+                func.sum(func.IF(
+                    Car.mileage.isnot(None) & Car.year_manufacture.isnot(None) & Car.price.isnot(None),
+                    1, 0
+                )).label("complete"),
+                func.max(Car.scraped_at).label("last_scraped"),
+            ).one()
 
-            if total_cars == 0:
+            total = row.total or 0
+            if total == 0:
                 return jsonify({
-                    "total_cars": 0,
-                    "total_brands": 0,
-                    "total_models": 0,
-                    "avg_price": None,
-                    "avg_mileage": None,
-                    "avg_year": None,
-                    "complete_data_pct": 0,
-                    "last_scraped": None,
+                    "total_cars": 0, "total_brands": 0, "total_models": 0,
+                    "avg_price": None, "avg_mileage": None, "avg_year": None,
+                    "complete_data_pct": 0, "last_scraped": None,
                 })
 
-            total_brands = session.query(Car.brand).distinct().count()
-            total_models = session.query(Car.brand, Car.model).distinct().count()
-
-            avg_price = session.query(func.avg(Car.price)).filter(
-                Car.price > 0, Car.price < MAX_REASONABLE_PRICE
+            total_models = session.query(
+                func.count(func.distinct(func.concat(Car.brand, ':', Car.model)))
             ).scalar()
-            avg_mileage = session.query(func.avg(Car.mileage)).filter(
-                Car.mileage > 0, Car.mileage < MAX_REASONABLE_MILEAGE
-            ).scalar()
-            avg_year = session.query(func.avg(Car.year_manufacture)).scalar()
-
-            # Cars with complete core data
-            complete = session.query(Car).filter(
-                Car.mileage.isnot(None),
-                Car.year_manufacture.isnot(None),
-                Car.price.isnot(None),
-            ).count()
-
-            # Last scrape time
-            last_scraped = session.query(func.max(Car.scraped_at)).scalar()
 
             return jsonify({
-                "total_cars": total_cars,
-                "total_brands": total_brands,
+                "total_cars": total,
+                "total_brands": row.brands,
                 "total_models": total_models,
-                "avg_price": round(float(avg_price)) if avg_price else None,
-                "avg_mileage": round(float(avg_mileage)) if avg_mileage else None,
-                "avg_year": round(float(avg_year), 1) if avg_year else None,
-                "complete_data_pct": round(complete / total_cars * 100, 1),
-                "last_scraped": last_scraped.isoformat() if last_scraped else None,
+                "avg_price": round(float(row.avg_price)) if row.avg_price else None,
+                "avg_mileage": round(float(row.avg_mileage)) if row.avg_mileage else None,
+                "avg_year": round(float(row.avg_year), 1) if row.avg_year else None,
+                "complete_data_pct": round(row.complete / total * 100, 1),
+                "last_scraped": row.last_scraped.isoformat() if row.last_scraped else None,
             })
 
     except SQLAlchemyError as e:

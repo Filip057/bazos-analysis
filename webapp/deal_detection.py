@@ -140,8 +140,8 @@ def find_deals(session: Session, brand: Optional[str] = None,
     """
     Find underpriced offers using year-aware segmentation.
 
-    Each offer is compared against similar cars of the same brand+model+fuel
-    within a similar year range (±3 years, relaxing to ±5 or all if needed).
+    Loads all eligible offers in a single query, groups them into segments
+    in Python, and computes deal scores without additional DB round-trips.
 
     Args:
         session: SQLAlchemy session
@@ -156,80 +156,65 @@ def find_deals(session: Session, brand: Optional[str] = None,
     Returns:
         dict with 'deals' list and 'pagination' info
     """
-    # Find segments with enough offers
-    seg_query = (
-        session.query(
-            Car.brand, Car.model, Car.fuel,
-            func.count(Car.id).label("cnt"),
-        )
-        .filter(
-            Car.price > MIN_PRICE,
-            Car.price < MAX_PRICE,
-            Car.brand.isnot(None),
-            Car.model.isnot(None),
-        )
+    # Single query: load all offers with valid price in one shot
+    query = session.query(
+        Car.id, Car.brand, Car.model, Car.fuel,
+        Car.year_manufacture, Car.mileage, Car.power,
+        Car.price, Car.url, Car.review_status,
+    ).filter(
+        Car.price > MIN_PRICE,
+        Car.price < MAX_PRICE,
+        Car.brand.isnot(None),
+        Car.model.isnot(None),
     )
 
     if brand:
-        seg_query = seg_query.filter(Car.brand == brand)
+        query = query.filter(Car.brand == brand)
     if model:
-        seg_query = seg_query.filter(Car.model == model)
+        query = query.filter(Car.model == model)
     if fuel:
-        seg_query = seg_query.filter(Car.fuel == fuel)
+        query = query.filter(Car.fuel == fuel)
 
-    segments = (
-        seg_query
-        .group_by(Car.brand, Car.model, Car.fuel)
-        .having(func.count(Car.id) >= MIN_SEGMENT_SIZE)
-        .all()
-    )
+    all_rows = query.all()
+
+    # Group into segments: (brand, model, fuel) -> list of (id, price, year, ...)
+    segments: dict[tuple, list] = defaultdict(list)
+    for row in all_rows:
+        key = (row.brand, row.model, row.fuel)
+        segments[key].append(row)
 
     all_deals = []
 
-    for seg_brand, seg_model, seg_fuel, seg_count in segments:
-        # Load all offers in this segment
-        segment_offers = _get_segment_offers(session, seg_brand, seg_model, seg_fuel)
-        if len(segment_offers) < MIN_SEGMENT_SIZE:
+    for seg_key, offers in segments.items():
+        if len(offers) < MIN_SEGMENT_SIZE:
             continue
 
-        # Cache stats per year to avoid recomputing
-        year_stats_cache: dict[Optional[int], tuple] = {}
-
-        # Load full car objects for potential deals (price below global segment median)
-        # Pre-filter: only consider offers that could possibly be deals
-        all_prices = [price for _, price, _ in segment_offers]
+        # Precompute segment price tuples for stats
+        price_year_tuples = [(o.id, o.price, o.year_manufacture) for o in offers]
+        all_prices = [o.price for o in offers]
         global_stats = calculate_segment_stats(all_prices)
         if not global_stats or global_stats["median"] == 0:
             continue
 
-        # Quick pre-filter: only look at cars below global median
         global_threshold = global_stats["median"] * (1 - min_score / 100)
 
-        car_query = (
-            session.query(Car)
-            .filter(
-                Car.brand == seg_brand,
-                Car.model == seg_model,
-                Car.price > MIN_PRICE,
-                Car.price < global_threshold,
-            )
-        )
-        if seg_fuel:
-            car_query = car_query.filter(Car.fuel == seg_fuel)
+        # Cache year-band stats
+        year_stats_cache: dict[Optional[int], tuple] = {}
 
-        for car in car_query.all():
-            # Get year-specific stats (with caching)
+        for car in offers:
+            if car.price >= global_threshold:
+                continue
+
             year_key = car.year_manufacture
             if year_key not in year_stats_cache:
                 year_stats_cache[year_key] = _compute_year_band_stats(
-                    segment_offers, year_key
+                    price_year_tuples, year_key
                 )
 
             stats, confidence = year_stats_cache[year_key]
             if not stats or stats["median"] == 0:
                 continue
 
-            # Outlier floor: must be above 10% of year-band median
             outlier_floor = max(MIN_PRICE, stats["median"] * 0.10)
             if car.price <= outlier_floor:
                 continue
@@ -238,7 +223,6 @@ def find_deals(session: Session, brand: Optional[str] = None,
             if deal_score is None or deal_score < min_score:
                 continue
 
-            # Filter by confidence level
             if min_confidence:
                 min_level = _CONFIDENCE_LEVELS.get(min_confidence, 0)
                 cur_level = _CONFIDENCE_LEVELS.get(confidence, 0)
