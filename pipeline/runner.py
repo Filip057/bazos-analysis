@@ -71,6 +71,9 @@ from scraper.database_operations import (
     check_if_car,
     compute_derived_metrics,
     validate_year,
+    validate_mileage,
+    validate_power,
+    validate_price,
     get_model_id_sync,
     Session,
     UNIQUE_ID_PATTERN,
@@ -418,11 +421,14 @@ class PipelineRunner:
         unique_id_match = UNIQUE_ID_PATTERN.search(car_data["url"])
         unique_id = unique_id_match.group(1) if unique_id_match else None
 
-        # Validate year before DB insert
+        # Validate all extracted fields before DB insert
         validated_year = validate_year(car_data["year_manufacture"])
+        validated_mileage = validate_mileage(car_data["mileage"])
+        validated_power = validate_power(car_data["power"])
+        validated_price = validate_price(car_data["price"])
 
         years_in_usage, price_per_km, mileage_per_year = compute_derived_metrics(
-            car_data["price"], car_data["mileage"], validated_year
+            validated_price, validated_mileage, validated_year
         )
 
         sql = """
@@ -450,10 +456,10 @@ class PipelineRunner:
                 await cur.execute(sql, (
                     model_id,
                     validated_year,
-                    car_data["mileage"],
-                    car_data["power"],
+                    validated_mileage,
+                    validated_power,
                     car_data["fuel"],
-                    car_data["price"],
+                    validated_price,
                     car_data["url"],
                     years_in_usage,
                     price_per_km,

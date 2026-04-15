@@ -193,24 +193,77 @@ def validate_year(year_manufacture: int) -> Optional[int]:
     """Validate year of manufacture before DB insert.
 
     Returns the year if valid, None otherwise.
-    Rejects future years and anything before 1990.
+    Rejects future years and anything before 1900.
     """
     if year_manufacture is None:
         return None
     current_year = datetime.now().year
-    if 1990 <= year_manufacture <= current_year + 1:
+    if 1900 <= year_manufacture <= current_year:
         return year_manufacture
-    logger.warning(f"Rejected invalid year_manufacture={year_manufacture}")
+    logger.warning("Rejected invalid year_manufacture=%s", year_manufacture)
+    return None
+
+
+def validate_mileage(mileage) -> Optional[int]:
+    """Validate mileage before DB insert.
+
+    Returns mileage if plausible, None otherwise.
+    """
+    if mileage is None:
+        return None
+    try:
+        mileage = int(mileage)
+    except (TypeError, ValueError):
+        return None
+    if 0 < mileage <= 1_500_000:
+        return mileage
+    logger.warning("Rejected invalid mileage=%s", mileage)
+    return None
+
+
+def validate_power(power) -> Optional[int]:
+    """Validate engine power (kW) before DB insert.
+
+    Returns power if plausible, None otherwise.
+    """
+    if power is None:
+        return None
+    try:
+        power = int(power)
+    except (TypeError, ValueError):
+        return None
+    if 0 < power <= 1500:
+        return power
+    logger.warning("Rejected invalid power=%s", power)
+    return None
+
+
+def validate_price(price) -> Optional[int]:
+    """Validate price (CZK) before DB insert.
+
+    Returns price if plausible, None otherwise.
+    Rejects negative, zero, and extreme outlier prices.
+    """
+    if price is None:
+        return None
+    try:
+        price = int(price)
+    except (TypeError, ValueError):
+        return None
+    if 0 < price <= 50_000_000:
+        return price
+    logger.warning("Rejected invalid price=%s", price)
     return None
 
 
 def compute_derived_metrics(price, mileage, year_manufacture):
-    """Compute derived metrics with year validation."""
+    """Compute derived metrics from validated inputs."""
     current_year = datetime.now().year
-    # Validate year first
     year_manufacture = validate_year(year_manufacture)
+    mileage = validate_mileage(mileage)
+    price = validate_price(price)
     years_in_usage = current_year - year_manufacture if year_manufacture else None
-    price_per_km = price / mileage if mileage and mileage > 0 else None
+    price_per_km = price / mileage if price and mileage and mileage > 0 else None
     mileage_per_year = mileage / years_in_usage if mileage and years_in_usage and years_in_usage > 0 else None
     return years_in_usage, price_per_km, mileage_per_year
 
