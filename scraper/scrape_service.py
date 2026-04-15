@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import threading
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Dict, List, Optional
 
@@ -31,18 +32,30 @@ from webapp.config import get_config
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Shared engine (one per worker process, reused across all API calls)
 # ---------------------------------------------------------------------------
 
-def _make_session_factory():
-    """Build a standalone SQLAlchemy session factory for background threads."""
-    config = get_config()
-    engine = create_engine(
-        config.DATABASE_URI,
-        pool_pre_ping=True,
-        pool_recycle=3600,
-    )
-    return scoped_session(sessionmaker(bind=engine)), engine
+_config = get_config()
+_engine = create_engine(
+    _config.DATABASE_URI,
+    pool_pre_ping=True,
+    pool_recycle=3600,
+)
+_ScopedSession = scoped_session(sessionmaker(bind=_engine))
+
+
+@contextmanager
+def _get_session():
+    """Scoped session context manager for the shared engine."""
+    session = _ScopedSession()
+    try:
+        yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        _ScopedSession.remove()
 
 
 def _is_pid_alive(pid: int) -> bool:
@@ -78,9 +91,7 @@ class ScrapeJobManager:
 
         Returns the job dict on success, or None if a job is already running.
         """
-        Session, engine = _make_session_factory()
-        session = Session()
-        try:
+        with _get_session() as session:
             # Clean stale jobs first
             self._cleanup_stale_jobs(session)
 
@@ -103,12 +114,8 @@ class ScrapeJobManager:
                 brands_done=json.dumps([]),
             )
             session.add(job)
-            session.commit()
-
+            session.flush()
             result = job.serialize()
-        finally:
-            Session.remove()
-            engine.dispose()
 
         # Set up cancel event and launch thread
         cancel_event = threading.Event()
@@ -127,29 +134,19 @@ class ScrapeJobManager:
 
     def get_active_job(self) -> Optional[dict]:
         """Return the currently running/queued job, or None."""
-        Session, engine = _make_session_factory()
-        session = Session()
-        try:
+        with _get_session() as session:
             job = (
                 session.query(ScrapeJob)
                 .filter(ScrapeJob.status.in_(["queued", "running"]))
                 .first()
             )
             return job.serialize() if job else None
-        finally:
-            Session.remove()
-            engine.dispose()
 
     def get_job_status(self, job_id: str) -> Optional[dict]:
         """Return status of a specific job, or None if not found."""
-        Session, engine = _make_session_factory()
-        session = Session()
-        try:
+        with _get_session() as session:
             job = session.query(ScrapeJob).filter_by(job_id=job_id).first()
             return job.serialize() if job else None
-        finally:
-            Session.remove()
-            engine.dispose()
 
     def cancel_job(self, job_id: str) -> bool:
         """
@@ -157,9 +154,7 @@ class ScrapeJobManager:
 
         Returns True if the job was found and cancel was requested.
         """
-        Session, engine = _make_session_factory()
-        session = Session()
-        try:
+        with _get_session() as session:
             job = (
                 session.query(ScrapeJob)
                 .filter_by(job_id=job_id)
@@ -171,10 +166,6 @@ class ScrapeJobManager:
 
             job.status = "cancelled"
             job.completed_at = datetime.now()
-            session.commit()
-        finally:
-            Session.remove()
-            engine.dispose()
 
         # Signal the thread to stop
         cancel_event = self._cancel_events.get(job_id)
@@ -186,9 +177,7 @@ class ScrapeJobManager:
 
     def get_job_history(self, limit: int = 20) -> List[dict]:
         """Return recent scrape jobs ordered by start time descending."""
-        Session, engine = _make_session_factory()
-        session = Session()
-        try:
+        with _get_session() as session:
             jobs = (
                 session.query(ScrapeJob)
                 .order_by(desc(ScrapeJob.started_at))
@@ -196,15 +185,10 @@ class ScrapeJobManager:
                 .all()
             )
             return [j.serialize() for j in jobs]
-        finally:
-            Session.remove()
-            engine.dispose()
 
     def get_db_stats(self) -> dict:
         """Return offer counts per brand and totals."""
-        Session, engine = _make_session_factory()
-        session = Session()
-        try:
+        with _get_session() as session:
             total = session.query(func.count(Offer.id)).scalar() or 0
 
             brand_counts = (
@@ -218,9 +202,6 @@ class ScrapeJobManager:
 
             latest_scrape = session.query(func.max(Offer.scraped_at)).scalar()
 
-            # Build lookup of counts per brand
-            count_map = {name: count for name, count in brand_counts}
-
             return {
                 "total_offers": total,
                 "available_brands": sorted(CAR_BRANDS),
@@ -230,9 +211,6 @@ class ScrapeJobManager:
                 ],
                 "latest_scrape": latest_scrape.isoformat() if latest_scrape else None,
             }
-        finally:
-            Session.remove()
-            engine.dispose()
 
     # ------------------------------------------------------------------
     # Background thread
@@ -244,12 +222,21 @@ class ScrapeJobManager:
         brands: Optional[List[str]],
         cancel_event: threading.Event,
     ) -> None:
-        """Run the pipeline in a background thread with its own event loop."""
-        Session, engine = _make_session_factory()
+        """Run the pipeline in a background thread with its own event loop.
+
+        Uses a dedicated engine so the background thread does not share
+        connections with the Flask request threads.
+        """
+        bg_engine = create_engine(
+            _config.DATABASE_URI,
+            pool_pre_ping=True,
+            pool_recycle=3600,
+        )
+        BgSession = scoped_session(sessionmaker(bind=bg_engine))
 
         def update_status(**kwargs) -> None:
             """Write progress to the scrape_jobs row."""
-            session = Session()
+            session = BgSession()
             try:
                 job = session.query(ScrapeJob).filter_by(job_id=job_id).first()
                 if job:
@@ -260,7 +247,7 @@ class ScrapeJobManager:
                 logger.warning("Failed to update job %s status: %s", job_id, exc)
                 session.rollback()
             finally:
-                Session.remove()
+                BgSession.remove()
 
         def progress_callback(stats: dict) -> None:
             """Called by PipelineRunner after each brand/chunk."""
@@ -305,7 +292,7 @@ class ScrapeJobManager:
             )
         finally:
             self._cancel_events.pop(job_id, None)
-            engine.dispose()
+            bg_engine.dispose()
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -328,4 +315,3 @@ class ScrapeJobManager:
                 job.status = "failed"
                 job.completed_at = datetime.now()
                 job.error_message = f"Worker PID {job.worker_pid} died"
-        session.commit()
