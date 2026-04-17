@@ -1,33 +1,19 @@
 from datetime import datetime
 import re
-import csv
-import asyncio
 import logging
-from typing import Optional, Dict, List
+from typing import Optional, Dict
 
 from sqlalchemy.orm import sessionmaker, scoped_session
-from sqlalchemy import create_engine
-from database.model import Model, Brand, Offer, engine, init_database
-import aiomysql
-
-import os
-from webapp.config import get_config
+from database.model import Model, Brand, Offer, engine
 
 # Configure logging
 logger = logging.getLogger(__name__)
-
-# Load configuration - single source of truth for all DB credentials
-config = get_config()
-
 
 # Scoped session configuration
 Session = scoped_session(sessionmaker(bind=engine))
 
 # Pre-compiled regex for unique_id extraction
 UNIQUE_ID_PATTERN = re.compile(r'inzerat/(\d+)/')
-
-# Lock for thread-safe CSV writing
-csv_lock = asyncio.Lock()
 
 
 """
@@ -267,18 +253,6 @@ def compute_derived_metrics(price, mileage, year_manufacture):
     mileage_per_year = mileage / years_in_usage if mileage and years_in_usage and years_in_usage > 0 else None
     return years_in_usage, price_per_km, mileage_per_year
 
-async def log_unknown_model(model: Optional[str], url: str, year_manufacture: Optional[int] = None,
-                            mileage: Optional[int] = None, price: Optional[int] = None):
-    """Async CSV logging for unknown models with thread safety"""
-    async with csv_lock:
-        file_exists = os.path.isfile('unknown_models.csv')
-        # Use regular file I/O since aiofiles doesn't support csv module
-        with open('unknown_models.csv', 'a', newline='', encoding='utf-8') as csvfile:
-            writer = csv.writer(csvfile)
-            if not file_exists:
-                writer.writerow(['Model', 'URL', 'Year Manufacture', 'Mileage', 'Price'])  # Header row
-            writer.writerow([model, url, year_manufacture, mileage, price])  
-
 # Cache for model lookups to avoid repeated database queries
 _model_cache: Dict[tuple, Optional[int]] = {}
 
@@ -314,136 +288,6 @@ def get_model_id_sync(session, brand_name: str, model_name: Optional[str]) -> Op
 
     _model_cache[cache_key] = model.id
     return model.id
-
-
-async def fetch_data_into_database(data: List[Dict], batch_size: int = 100):
-    """Optimized async database insertion with caching"""
-    if not data:
-        logger.warning("No data to save")
-        return
-
-    # Initialize database tables if not already done
-    try:
-        init_database()
-    except Exception as e:
-        logger.error(f"Failed to initialize database: {e}")
-        logger.error("Make sure MySQL is running and credentials are correct")
-        raise
-
-    # Pre-load all model IDs in a single synchronous block to avoid blocking in async loop
-    session = Session()
-    try:
-        model_lookup = {}
-        unknown_models = []
-
-        for item in data:
-            brand = item['brand']
-            model = item['model']
-            key = (brand, model)
-
-            if key not in model_lookup:
-                model_id = get_model_id_sync(session, brand, model)
-                model_lookup[key] = model_id
-
-                if model_id is None and model is not None:
-                    unknown_models.append({
-                        'model': model,
-                        'url': item['url'],
-                        'year_manufacture': item.get('year_manufacture'),
-                        'mileage': item.get('mileage'),
-                        'price': item.get('price')
-                    })
-
-        # Log all unknown models asynchronously
-        if unknown_models:
-            await asyncio.gather(*[
-                log_unknown_model(
-                    um['model'], um['url'], um['year_manufacture'], um['mileage'], um['price']
-                ) for um in unknown_models
-            ])
-    finally:
-        session.close()
-
-    # Now do async database inserts (uses config - no hardcoded credentials)
-    async with aiomysql.create_pool(
-        host=config.MYSQL_HOST,
-        port=int(config.MYSQL_PORT),
-        user=config.MYSQL_USER,
-        password=config.MYSQL_PASSWORD,
-        db=config.MYSQL_DATABASE,
-        minsize=1,
-        maxsize=10
-    ) as pool:
-        async with pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                inserted_count = 0
-
-                for i in range(0, len(data), batch_size):
-                    batch = data[i:i + batch_size]
-                    values = []
-
-                    for item in batch:
-                        # Use pre-compiled regex pattern
-                        unique_id_match = UNIQUE_ID_PATTERN.search(item['url'])
-                        unique_id = unique_id_match.group(1) if unique_id_match else None
-
-                        # Validate year before insert
-                        validated_year = validate_year(item['year_manufacture'])
-
-                        years_in_usage, price_per_km, mileage_per_year = compute_derived_metrics(
-                            item['price'], item['mileage'], validated_year
-                        )
-
-                        # Use cached model_id
-                        model_id = model_lookup.get((item['brand'], item['model']))
-
-                        if model_id:
-                            values.append((
-                                model_id,
-                                validated_year,
-                                item['mileage'],
-                                item['power'],
-                                item.get('fuel'),
-                                item['price'],
-                                item['url'],
-                                years_in_usage,
-                                price_per_km,
-                                mileage_per_year,
-                                unique_id,
-                                item.get('listing_date'),
-                                item.get('view_count'),
-                            ))
-
-                    if values:
-                        sql = """
-                        INSERT INTO offers (
-                            model_id, year_manufacture, mileage, power, fuel,
-                            price, url, years_in_usage, price_per_km, mileage_per_year,
-                            unique_id, scraped_at, listing_date, view_count
-                        )
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s)
-                        ON DUPLICATE KEY UPDATE
-                            year_manufacture = VALUES(year_manufacture),
-                            mileage = VALUES(mileage),
-                            power = VALUES(power),
-                            fuel = VALUES(fuel),
-                            price = VALUES(price),
-                            years_in_usage = VALUES(years_in_usage),
-                            price_per_km = VALUES(price_per_km),
-                            mileage_per_year = VALUES(mileage_per_year),
-                            scraped_at = NOW(),
-                            listing_date = VALUES(listing_date),
-                            view_count = VALUES(view_count)
-                        """
-                        await cur.executemany(sql, values)
-                        inserted_count += len(values)
-
-                await conn.commit()
-                logger.info(f"✓ Inserted/Updated {inserted_count} records in database")
-
-
-
- 
 
 
 

@@ -15,7 +15,7 @@ import pytest
 from flask import Flask, jsonify
 
 # Ensure JWT_SECRET is set before importing the auth module
-os.environ.setdefault("JWT_SECRET", "test-secret-key-for-unit-tests")
+os.environ.setdefault("JWT_SECRET", "test-secret-key-for-unit-tests-min-32-bytes")
 
 from webapp.auth import (
     JWT_ALGORITHM,
@@ -25,6 +25,33 @@ from webapp.auth import (
     issue_token,
     verify_password,
 )
+
+
+class TestJWTSecretValidation:
+    """Startup-time validation of JWT_SECRET length and presence."""
+
+    def _reload_secret(self):
+        """Helper: re-import _get_secret so it picks up patched env."""
+        from webapp.auth import _get_secret
+        return _get_secret
+
+    def test_missing_secret_raises(self):
+        with patch.dict(os.environ, {}, clear=True):
+            with pytest.raises(RuntimeError, match="JWT_SECRET must be set"):
+                self._reload_secret()()
+
+    def test_short_secret_rejected(self):
+        # 31 bytes — one short of the HS256 minimum
+        short = "a" * 31
+        with patch.dict(os.environ, {"JWT_SECRET": short}):
+            with pytest.raises(RuntimeError, match="at least 32 bytes"):
+                self._reload_secret()()
+
+    def test_minimum_length_secret_accepted(self):
+        # Exactly 32 bytes — should pass
+        ok = "a" * 32
+        with patch.dict(os.environ, {"JWT_SECRET": ok}):
+            assert self._reload_secret()() == ok
 
 
 class TestPasswordHashing:
@@ -85,7 +112,7 @@ class TestJWTTokens:
 
     def test_decode_rejects_wrong_secret(self):
         # Token signed by a different secret should fail
-        bogus = jwt.encode({"sub": "1"}, "different-secret", algorithm=JWT_ALGORITHM)
+        bogus = jwt.encode({"sub": "1"}, "different-secret-padded-to-32-bytes!", algorithm=JWT_ALGORITHM)
         assert decode_token(bogus) is None
 
 

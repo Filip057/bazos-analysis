@@ -16,7 +16,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 os.environ.setdefault("SECRET_KEY", "test-secret")
-os.environ.setdefault("JWT_SECRET", "test-jwt-secret")
+os.environ.setdefault("JWT_SECRET", "test-jwt-secret-padded-to-min-32-bytes")
 os.environ.setdefault("MYSQL_PASSWORD", "test")
 
 from webapp.auth import issue_token

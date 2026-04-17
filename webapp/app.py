@@ -29,10 +29,20 @@ from database.admin_operations import (
     bulk_normalize_fuel, bulk_fix_misplaced, EDITABLE_FIELDS,
 )
 from scraper.scrape_service import ScrapeJobManager
+from scraper.data_scrap import CAR_BRANDS
 
 # Sanity bounds for filtering outliers in statistics
 MAX_REASONABLE_MILEAGE = 1_000_000  # km
 MAX_REASONABLE_PRICE = 50_000_000   # CZK
+
+# Whitelisted fields for user-controlled filtering and sorting (admin browser).
+# Prevents exposing internal SQLAlchemy attributes via hasattr().
+ALLOWED_FILTER_FIELDS = {
+    "brand", "model", "fuel", "year_manufacture", "mileage",
+    "power", "price", "review_status", "listing_date", "view_count",
+}
+ALLOWED_SORT_FIELDS = ALLOWED_FILTER_FIELDS | {"id", "scraped_at", "years_in_usage",
+                                                 "price_per_km", "mileage_per_year"}
 MAX_PRICE_PER_KM = 500.0           # CZK/km — above this is likely bad data
 
 # Configure logging
@@ -696,18 +706,18 @@ def api_admin_offers():
                 if val_to is not None:
                     query = query.filter(col <= val_to)
 
-            # Missing fields filter
+            # Missing fields filter (whitelist-only to prevent attribute enumeration)
             missing = request.args.get("missing", "")
             if missing:
                 for field_name in missing.split(","):
                     field_name = field_name.strip()
-                    if hasattr(Car, field_name):
+                    if field_name in ALLOWED_FILTER_FIELDS:
                         query = query.filter(getattr(Car, field_name).is_(None))
 
-            # Sorting
+            # Sorting (whitelist-only)
             sort_field = request.args.get("sort", "id")
             sort_dir = request.args.get("sort_dir", "desc")
-            if hasattr(Car, sort_field):
+            if sort_field in ALLOWED_SORT_FIELDS:
                 col = getattr(Car, sort_field)
                 query = query.order_by(col.asc() if sort_dir == "asc" else col.desc())
             else:
@@ -857,6 +867,12 @@ def api_admin_scrape_start():
         brands = [brands]
     if brands and not isinstance(brands, list):
         return jsonify({"error": "brands must be a list of strings or omitted for all"}), 400
+
+    # Validate brand names against known list
+    if brands:
+        unknown = [b for b in brands if b not in CAR_BRANDS]
+        if unknown:
+            return jsonify({"error": f"Unknown brands: {unknown}"}), 400
 
     result = scrape_manager.start_job(brands=brands)
     if result is None:

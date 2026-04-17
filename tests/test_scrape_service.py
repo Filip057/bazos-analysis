@@ -18,7 +18,7 @@ import pytest
 
 # Set env vars before importing app modules
 os.environ.setdefault("SECRET_KEY", "test-secret")
-os.environ.setdefault("JWT_SECRET", "test-jwt-secret")
+os.environ.setdefault("JWT_SECRET", "test-jwt-secret-padded-to-min-32-bytes")
 os.environ.setdefault("MYSQL_PASSWORD", "test")
 
 from sqlalchemy import create_engine

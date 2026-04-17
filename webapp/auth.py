@@ -22,12 +22,22 @@ logger = logging.getLogger(__name__)
 TOKEN_LIFETIME = timedelta(hours=24)
 JWT_ALGORITHM = "HS256"
 
+# HS256 uses HMAC-SHA256; RFC 7518 §3.2 requires a key of at least 256 bits (32 bytes).
+# Shorter secrets weaken signature security and are rejected at startup.
+MIN_JWT_SECRET_BYTES = 32
+
 
 def _get_secret() -> str:
-    """Return the JWT signing secret from env. Raises if missing."""
+    """Return the JWT signing secret from env. Raises if missing or too short."""
     secret = os.getenv("JWT_SECRET")
     if not secret:
         raise RuntimeError("JWT_SECRET must be set in .env")
+    if len(secret.encode("utf-8")) < MIN_JWT_SECRET_BYTES:
+        raise RuntimeError(
+            f"JWT_SECRET must be at least {MIN_JWT_SECRET_BYTES} bytes for HS256 "
+            f"(got {len(secret.encode('utf-8'))}). "
+            f"Generate one with: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+        )
     return secret
 
 

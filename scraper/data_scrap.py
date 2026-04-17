@@ -14,7 +14,7 @@ from typing import List, Tuple, Optional, Dict
 from scraper.car_models import CAR_MODELS
 import scraper.car_models as car_models
 
-from scraper.database_operations import check_if_car, fetch_data_into_database
+from scraper.database_operations import check_if_car
 
 # Progress tracking
 from tqdm.asyncio import tqdm as async_tqdm
@@ -438,12 +438,11 @@ async def main(skip_db=False, brands=None):
         extractor.print_stats()
 
         # Step 7: Save data into database
+        # NOTE: This legacy main() is unused — PipelineRunner handles DB saves now.
         if skip_db:
             logger.info("⏭️  Skipping database save (--skip-db flag used)")
         else:
-            logger.info("Saving to database...")
-            await fetch_data_into_database(data=processed_data)
-            logger.info(f"✓ Successfully saved {len(processed_data)} cars to database")
+            logger.warning("Legacy main() does not save to DB — use PipelineRunner instead")
 
 async def run(skip_db=False, brands=None):
     await main(skip_db=skip_db, brands=brands)
